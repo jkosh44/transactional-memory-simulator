@@ -104,7 +104,7 @@ I plan on implementing this using Ubuntu 20.04 on my own personal computer. Howe
 The presentation will involve showing charts and graphs comparing the performance of different implementations under different workloads, as well as a demo of running one of the workloads.
 
 ## Platform Choice
-I plan on implementing this in C++ for Ubunto 20.04. I'm choosing C++ because it has the low-level capabilities to manipulate memory directly, but also the high-level data structures to organize code more effectively. I'm choosing Ubuntu 20.04 because that's the OS on my computer and it's convenient.
+I plan on implementing this in C++ for Ubuntu 20.04. I'm choosing C++ because it has the low-level capabilities to manipulate memory directly, but also the high-level data structures to organize code more effectively. I'm choosing Ubuntu 20.04 because that's the OS on my computer and it's convenient.
 
 ## Schedule
 - April 12th: MVP
