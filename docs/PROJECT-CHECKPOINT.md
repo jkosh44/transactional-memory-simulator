@@ -28,8 +28,8 @@ a goal of manually creating workloads for testing.
 
 - April 26th - 28th: Pessimistic conflict detection
 - April 28th - May 1st: Optimistic conflict detection
-- May 1st - May 5th: Transaction rollback implementation
-- May 5th - May 10th: Benchmarking and report
+- May 1st - May 5th: Benchmarking
+- May 5th - May 10th: Report
 
 ## Implementation Summary
 
@@ -117,7 +117,11 @@ following settings:
 1. Eager data versioning and pessimistic conflict detection
 2. Lazy data versioning and optimistic conflict detection
 3. Lazy data versioning and pessimistic conflict detection
-4. ~~Eager data versioning and optimistic conflict detection~~ This is not possible
+4. ~~Eager data versioning and optimistic conflict detection~~ This is not *easily* possible
+    1. If a conflict is detected during commit then somehow we'll need to identify which transaction wrote to the
+       conflicting areas first. That way we know which value to undo to. To do this, it's not enough to know the 
+       timestamp of the transaction. We would need to know the timestamp of every write in the transaction. While this 
+       is possible, the overhead involved is not worth it.
 
 ### Issues
 
