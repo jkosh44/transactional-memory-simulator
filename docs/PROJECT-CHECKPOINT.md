@@ -8,9 +8,10 @@ My original schedule had the following due by April 26th
 - April 19th: Data versioning implementations
 - April 26th: Conflict detection implementations
 
-Of these I have completed the project MVP and the data versioning implementations. I have not completed the conflict
-detection implementations. It is unlikely that I will be able to achieve my extra goals. Additionally I will likely have
-to remove the goal of "Workload generators" and replace it with a goal of manually creating workloads for testing.
+Of these I have completed the project MVP and the data versioning implementations. I have not fully completed the
+conflict detection implementations, but I have implemented transaction rollbacks. It is unlikely that I will be able to
+achieve my extra goals. Additionally I will likely have to remove the goal of "Workload generators" and replace it with
+a goal of manually creating workloads for testing.
 
 ## Updated Goals
 
@@ -18,7 +19,7 @@ to remove the goal of "Workload generators" and replace it with a goal of manual
   to abort transactions.
 - [x] Eager data versioning implementation
 - [x] Lazy data versioning implementation
-- [ ] Transaction rollback implementation
+- [x] Transaction rollback implementation
 - [ ] Pessimistic conflict detection implementation
 - [ ] Optimistic conflict detection implementation
 - [ ] Manually generate workloads and benchmark those workloads
@@ -110,13 +111,13 @@ write because that's the value that will actually get written during commit.
 ### Presentation
 
 At the end of the project I plan to present graphs and charts that display both the runtime and number of aborts for
-various workloads under different transactional settings. So for a single workload I will run it 4 times using the
+various workloads under different transactional settings. So for a single workload I will run it 3 times using the
 following settings:
 
-1. Eager data versioning and optimistic conflict detection
-2. Eager data versioning and optimistic conflict detection
-3. Lazy data versioning and optimistic conflict detection
-4. Lazy data versioning and optimistic conflict detection
+1. Eager data versioning and pessimistic conflict detection
+2. Lazy data versioning and optimistic conflict detection
+3. Lazy data versioning and pessimistic conflict detection
+4. ~~Eager data versioning and optimistic conflict detection~~ This is not possible
 
 ### Issues
 
