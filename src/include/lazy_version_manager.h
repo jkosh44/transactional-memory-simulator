@@ -3,10 +3,8 @@
 #include <cstdint>
 #include <unordered_map>
 #include <list>
-#include <memory>
 #include <shared_mutex>
 #include <cstring>
-
 
 struct Write {
     Write(void *data, size_t size) : data_(data), size_(size) {}
@@ -44,6 +42,7 @@ public:
 
         auto &write_buffer = write_buffers_[transaction_id];
 
+        // If we write twice to the same location, we only care about the most recent write.
         if (write_buffer.count(address) > 0) {
             auto &write = write_buffer.at(address);
             free(write.data_);
