@@ -72,6 +72,12 @@ public:
     bool GetValue(uint64_t transaction_id, void *address, void *dest);
 
     /**
+     * Aborts transaction
+     * @param transaction_id id of transaction
+     */
+    void abort(uint64_t transaction_id);
+
+    /**
      * Free all memory related to transaction
      * @param transaction_id id of transaction
      */

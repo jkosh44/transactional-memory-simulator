@@ -57,6 +57,11 @@ public:
      */
     std::pair<UndoLog &, std::shared_lock<std::shared_mutex>> GetUndoLog(uint64_t transaction_id);
 
+    /**
+     * Abort transaction
+     * @param transaction_id id of transaction
+     */
+    void abort(uint64_t transaction_id);
 
     /**
     * Free all memory related to transaction

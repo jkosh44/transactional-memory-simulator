@@ -6,7 +6,7 @@
 #include "lazy_version_manager.h"
 
 // If LAZY_VERSIONING is set to 0 then eager versioning will be used
-#define LAZY_VERSIONING 0
+#define LAZY_VERSIONING 1
 
 class TransactionManager {
 
@@ -21,15 +21,6 @@ public:
      * @return transaction id
      */
     uint64_t xbegin();
-
-    /**
-     * Commit memory transaction
-     *
-     * @param transaction_id id of transaction to commit
-     *
-     * @throws TransactionAbortException
-     */
-    void xend(uint64_t transaction_id);
 
     /**
      * Store value at address for transaction
@@ -73,6 +64,21 @@ public:
 #endif
         return *address;
     }
+
+    /**
+     * Abort transaction
+     * @param transaction_id id of transaction
+     */
+    void abort(uint64_t transaction_id);
+
+    /**
+    * Commit memory transaction
+    *
+    * @param transaction_id id of transaction to commit
+    *
+    * @throws TransactionAbortException
+    */
+    void xend(uint64_t transaction_id);
 
 
 private:

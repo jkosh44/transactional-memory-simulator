@@ -13,6 +13,15 @@ uint64_t TransactionManager::xbegin() {
     return txn_id;
 }
 
+void TransactionManager::abort(uint64_t transaction_id) {
+#if LAZY_VERSIONING
+    lazy_version_manager_.abort(transaction_id);
+#else
+    eager_version_manager_.abort(transaction_id);
+#endif
+}
+
+
 void TransactionManager::xend(uint64_t transaction_id) {
 #if LAZY_VERSIONING
     auto[write_buffer, lock] = lazy_version_manager_.GetWriteBuffer(transaction_id);

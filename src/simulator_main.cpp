@@ -23,5 +23,7 @@ int main(int argc, char *argv[]) {
     std::cout << "Stored value for txn " << second_txn_id << " is " << transaction_manager.load(&test, second_txn_id)
               << std::endl;
 
+    transaction_manager.xend(second_txn_id);
+
     return 0;
 }
