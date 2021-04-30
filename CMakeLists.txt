@@ -9,3 +9,5 @@ file(GLOB SOURCES
 add_executable(simulator ${SOURCES})
 
 set_property(TARGET simulator PROPERTY CXX_STANDARD 17)
+
+SET(CMAKE_CXX_FLAGS -pthread)

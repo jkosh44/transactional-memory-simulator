@@ -6,11 +6,6 @@
 #include "lazy_version_manager.h"
 #include "transaction_manager.h"
 
-// If LAZY_VERSIONING is set to 0 then eager versioning will be used
-#define LAZY_VERSIONING 0
-// If PESSIMISTIC_CONFLICT_DETECTION is set to 0 then optimistic conflict detection will be used
-#define PESSIMISTIC_CONFLICT_DETECTION 1
-
 
 class TransactionManager;
 
@@ -35,7 +30,7 @@ public:
             Abort();
         }
         write_set_.emplace(address);
-        transaction_manager_->Store(address, transaction_id_);
+        transaction_manager_->Store(address, this);
 #if LAZY_VERSIONING
         lazy_version_manager_.Store(address, value);
 #else
@@ -60,7 +55,7 @@ public:
             Abort();
         }
         read_set_.emplace(address);
-        transaction_manager_->Load(address, transaction_id_);
+        transaction_manager_->Load(address, this);
 #if LAZY_VERSIONING
         T res;
         // Check if write is in write buffer
@@ -98,6 +93,12 @@ public:
      * @return true if the transaction was successfully aborted false otherwise
      */
     bool MarkAborted();
+
+    /**
+     *
+     * @return true if aborted, false otherwise
+     */
+    bool IsAborted() { return state_ == ABORTED; }
 
     /**
      *

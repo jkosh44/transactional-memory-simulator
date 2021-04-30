@@ -6,6 +6,8 @@
 #include <shared_mutex>
 #include <cstring>
 
+#include "transaction_manager.h"
+
 struct Write {
     Write(void *data, size_t size) : data_(data), size_(size) {}
 

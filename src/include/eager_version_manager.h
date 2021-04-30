@@ -4,6 +4,8 @@
 #include <unordered_map>
 #include <cstring>
 
+#include "transaction_manager.h"
+
 
 struct Undo {
     Undo(void *data, size_t size) : data_(data), size_(size) {}

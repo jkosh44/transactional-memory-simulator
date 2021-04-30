@@ -11,7 +11,7 @@ void Transaction::Abort() {
 #else
     eager_version_manager_.Abort();
 #endif
-    transaction_manager_->XEnd(*this);
+    transaction_manager_->Abort(this);
     abort_cv_.notify_all();
     throw AbortException("Transaction aborted");
 }
@@ -34,7 +34,7 @@ void Transaction::XEnd() {
         eager_version_manager_.XEnd();
 #endif
     }
-    transaction_manager_->XEnd(*this);
+    transaction_manager_->XEnd(this);
 }
 
 uint64_t Transaction::GetTransactionId() const {
