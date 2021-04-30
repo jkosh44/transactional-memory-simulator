@@ -1,18 +1,24 @@
 #pragma once
 
 #include <atomic>
+#include <unordered_set>
 #include "eager_version_manager.h"
 #include "lazy_version_manager.h"
+#include "transaction_manager.h"
 
 // If LAZY_VERSIONING is set to 0 then eager versioning will be used
-#define LAZY_VERSIONING 1
+#define LAZY_VERSIONING 0
 // If PESSIMISTIC_CONFLICT_DETECTION is set to 0 then optimistic conflict detection will be used
 #define PESSIMISTIC_CONFLICT_DETECTION 1
+
+
+class TransactionManager;
+
 
 class Transaction {
 
 public:
-    explicit Transaction(uint64_t transaction_id);
+    explicit Transaction(uint64_t transaction_id, TransactionManager *transaction_manager);
 
     /**
      * Store value at address for transaction
@@ -25,9 +31,11 @@ public:
      */
     template<typename T>
     void Store(T *address, T value) {
-        if(state_ == ABORTED) {
+        if (state_ == ABORTED) {
             Abort();
         }
+        write_set_.emplace(address);
+        transaction_manager_->Store(address, transaction_id_);
 #if LAZY_VERSIONING
         lazy_version_manager_.Store(address, value);
 #else
@@ -48,9 +56,11 @@ public:
      */
     template<typename T>
     T Load(T *address) {
-        if(state_ == ABORTED) {
+        if (state_ == ABORTED) {
             Abort();
         }
+        read_set_.emplace(address);
+        transaction_manager_->Load(address, transaction_id_);
 #if LAZY_VERSIONING
         T res;
         // Check if write is in write buffer
@@ -80,7 +90,7 @@ public:
      *
      * @return Transaction Id of transaction
      */
-    uint64_t GetTransactionId();
+    uint64_t GetTransactionId() const;
 
     /**
      * Mark that this transaction has been aborted
@@ -89,10 +99,24 @@ public:
      */
     bool MarkAborted();
 
+    /**
+     *
+     * @return Write set of transaction
+     */
+    const std::unordered_set<void *> &GetWriteSet() const { return write_set_; }
+
+    /**
+     *
+     * @return Read set of transaction
+     */
+    const std::unordered_set<void *> &GetReadSet() const { return read_set_; }
+
 private:
     uint64_t transaction_id_;
+    TransactionManager *transaction_manager_;
 #if LAZY_VERSIONING
-    LazyVersionManager lazy_version_manager_;
+    LazyVersionManager
+            lazy_version_manager_;
 #else
     EagerVersionManager eager_version_manager_;
 #endif
@@ -105,6 +129,8 @@ private:
      */
     std::atomic<int> state_;
     std::condition_variable abort_cv_;
+    std::unordered_set<void *> write_set_;
+    std::unordered_set<void *> read_set_;
 
     static constexpr int RUNNING = 0;
     static constexpr int COMMITTING = 1;
