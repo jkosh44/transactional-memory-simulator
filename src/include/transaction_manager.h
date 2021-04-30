@@ -1,12 +1,21 @@
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
+#include <unordered_set>
 
 #include "eager_version_manager.h"
 #include "lazy_version_manager.h"
 
+
 // If LAZY_VERSIONING is set to 0 then eager versioning will be used
 #define LAZY_VERSIONING 1
+// If PESSIMISTIC_CONFLICT_DETECTION is set to 0 then optimistic conflict detection will be used
+#define PESSIMISTIC_CONFLICT_DETECTION 1
+
+
+class Transaction;
+
 
 class TransactionManager {
 
@@ -20,72 +29,55 @@ public:
      * Begin memory transaction
      * @return transaction id
      */
-    uint64_t xbegin();
+    Transaction XBegin();
 
     /**
-     * Store value at address for transaction
+     * Adds transaction to write set for address
      *
-     * @tparam T type of value
-     * @param address location to store value
-     * @param value value to store
-     * @param transaction_id id of transaction
-     *
-     * @throws TransactionAbortException
+     * @param address location to Store value
+     * @param transaction transaction performing store
      */
-    template<typename T>
-    void store(T *address, T value, uint64_t transaction_id) {
-#if LAZY_VERSIONING
-        lazy_version_manager_.store(address, value, transaction_id);
-#else
-        eager_version_manager_.store(address, value, transaction_id);
-        *address = value;
-#endif
-    }
+    void Store(void *address, Transaction *transaction);
 
     /**
-     * Loads value from address for transaction
-     *
-     * @tparam T type of value
-     * @param address location that value is stored
-     * @param transaction_id id of transaction
-     *
-     * @return value stored at address
-     *
-     * @throws TransactionAbortException
+     * Adds transaction to read set for address
+     * @param address
+     * @param transaction transaction performing load
      */
-    template<typename T>
-    T load(T *address, uint64_t transaction_id) {
-#if LAZY_VERSIONING
-        T res;
-        // Check if write is in write buffer
-        if (lazy_version_manager_.GetValue(transaction_id, address, &res)) {
-            return res;
-        }
-#endif
-        return *address;
-    }
+    void Load(void *address, Transaction *transaction);
 
     /**
-     * Abort transaction
-     * @param transaction_id id of transaction
+     * Clean up all memory associated with transaction that commits
+     *
+     * @param transaction transaction to clean up memory for
      */
-    void abort(uint64_t transaction_id);
+    void XEnd(Transaction *transaction);
 
     /**
-    * Commit memory transaction
-    *
-    * @param transaction_id id of transaction to commit
-    *
-    * @throws TransactionAbortException
-    */
-    void xend(uint64_t transaction_id);
-
+     * Clean up all memory associated with transaction that aborts
+     *
+     * @param transaction transaction to clean up memory for
+     */
+    void Abort(Transaction *transaction);
 
 private:
     std::atomic<uint64_t> next_txn_id_;
-#if LAZY_VERSIONING
-    LazyVersionManager lazy_version_manager_;
-#else
-    EagerVersionManager eager_version_manager_;
-#endif
+    std::unordered_map<void *, std::unordered_set<Transaction *>> write_sets_;
+    std::shared_mutex write_set_mutex_;
+    std::unordered_map<void *, std::unordered_set<Transaction *>> read_sets_;
+    std::shared_mutex read_set_mutex_;
+
+    std::condition_variable_any read_stall_cv_;
+
+    void LoadStoreHelper(void *address, Transaction *transaction,
+                         std::unordered_map<void *, std::unordered_set<Transaction *>> *map, std::shared_mutex *mutex);
+
+    void LoadStoreHelper(void *address, Transaction *transaction,
+                         std::unordered_map<void *, std::unordered_set<Transaction *>> *map);
+
+    void CleanUpHelper(const std::unordered_set<void *> &addresses, Transaction *transaction,
+                       std::unordered_map<void *, std::unordered_set<Transaction *>> *map, std::shared_mutex *mutex);
+
+    void CleanUpHelper(const std::unordered_set<void *> &addresses, Transaction *transaction,
+                       std::unordered_map<void *, std::unordered_set<Transaction *>> *map);
 };
