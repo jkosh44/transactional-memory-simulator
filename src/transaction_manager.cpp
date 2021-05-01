@@ -1,3 +1,4 @@
+#include <iostream>
 #include "include/transaction_manager.h"
 
 #include "include/transaction.h"
@@ -43,8 +44,7 @@ void TransactionManager::Load(void *address, Transaction *transaction) {
     std::unique_lock<std::shared_mutex> exclusive_lock(write_set_mutex_);
     // If there is someone other than the reading transaction, stall until no more writes. If two reads are waiting at
     // the same time, then only one can proceed
-    if (write_sets_.count(address) > 0 &&
-        !(write_sets_.at(address).size() == 1 && write_sets_.at(address).count(transaction) > 0)) {
+    if (write_sets_.count(address) > 0 && !write_sets_.at(address).count(transaction) > 0) {
         read_stall_cv_.wait(exclusive_lock, [&] { return write_sets_.count(address) == 0; });
     }
 #else

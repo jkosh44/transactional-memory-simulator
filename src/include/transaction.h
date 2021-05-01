@@ -29,8 +29,8 @@ public:
         if (state_ == ABORTED) {
             Abort();
         }
-        write_set_.emplace(address);
         transaction_manager_->Store(address, this);
+        write_set_.emplace(address);
 #if LAZY_VERSIONING
         lazy_version_manager_.Store(address, value);
 #else
@@ -54,8 +54,8 @@ public:
         if (state_ == ABORTED) {
             Abort();
         }
-        read_set_.emplace(address);
         transaction_manager_->Load(address, this);
+        read_set_.emplace(address);
 #if LAZY_VERSIONING
         T res;
         // Check if write is in write buffer
