@@ -7,23 +7,21 @@
 #include "eager_version_manager.h"
 #include "lazy_version_manager.h"
 
-
-// If LAZY_VERSIONING is set to 0 then eager versioning will be used
-#define LAZY_VERSIONING 1
-// If PESSIMISTIC_CONFLICT_DETECTION is set to 0 then optimistic conflict detection will be used
-#define PESSIMISTIC_CONFLICT_DETECTION 1
-
-
 class Transaction;
-
 
 class TransactionManager {
 
 public:
+
+    struct TransactionSet {
+        std::unordered_set<Transaction *> transaction_set_;
+        std::shared_mutex transaction_mutex_;
+    };
+
     /**
      * Default constructor for TransactionManager
      */
-    TransactionManager();
+    TransactionManager(bool use_lazy_versioning, bool use_pessimistic_conflict_detection);
 
     /**
      * Begin memory transaction
@@ -46,6 +44,8 @@ public:
      */
     void Load(void *address, Transaction *transaction);
 
+    void ResolveConflictsAtCommit(Transaction *transaction);
+
     /**
      * Clean up all memory associated with transaction that commits
      *
@@ -55,29 +55,79 @@ public:
 
     /**
      * Clean up all memory associated with transaction that aborts
+     * WARNING: MUST BE CALLED WITH EXCLUSIVE LOCKS ON THE READ AND WRITE SETS
      *
      * @param transaction transaction to clean up memory for
      */
+    void AbortWithoutLocks(Transaction *transaction);
+
+    /**
+    * Clean up all memory associated with transaction that aborts
+    *
+    * @param transaction transaction to clean up memory for
+    */
     void Abort(Transaction *transaction);
 
 private:
+    bool use_lazy_versioning_;
+    bool use_pessimistic_conflict_detection_;
+
     std::atomic<uint64_t> next_txn_id_;
-    std::unordered_map<void *, std::unordered_set<Transaction *>> write_sets_;
+    std::unordered_map<void *, TransactionSet> write_sets_;
     std::shared_mutex write_set_mutex_;
-    std::unordered_map<void *, std::unordered_set<Transaction *>> read_sets_;
+    std::unordered_map<void *, TransactionSet> read_sets_;
     std::shared_mutex read_set_mutex_;
 
     std::condition_variable_any read_stall_cv_;
 
-    void LoadStoreHelper(void *address, Transaction *transaction,
-                         std::unordered_map<void *, std::unordered_set<Transaction *>> *map, std::shared_mutex *mutex);
+    /**
+     *
+     */
 
-    void LoadStoreHelper(void *address, Transaction *transaction,
-                         std::unordered_map<void *, std::unordered_set<Transaction *>> *map);
+    /**
+     * Check and see if there's a conflict with the current transaction
+     * DO NOT CALL THIS METHOD WITHOUT AN EXCLUSIVE LOCK
+     *
+     * @param address Address to check for conflicts
+     * @param address_map Map of transaction sets to check for conflicts in
+     * @param transaction Transaction to check conflicts for
+     * @return true if there are any conflicts false otherwise
+     */
+    bool CheckForConflictWithoutLocking(void *address, std::unordered_map<void *, TransactionSet> &address_map,
+                                        Transaction *transaction);
 
-    void CleanUpHelper(const std::unordered_set<void *> &addresses, Transaction *transaction,
-                       std::unordered_map<void *, std::unordered_set<Transaction *>> *map, std::shared_mutex *mutex);
+    /**
+     * Abort all transactions that have a conflict with the current transaction
+     * DO NOT CALL THIS METHOD WITHOUT AN EXCLUSIVE LOCK
+     *
+     * @param address_map Map of transaction sets to check for conflicts in
+     * @param transaction Transaction to check conflicts for
+     * @return true if we were able to successfully abort other transactions false otherwise
+     */
+    bool AbortTransactionsWithConflictsWithoutLocking(std::unordered_map<void *, TransactionSet> &address_map,
+                                                      Transaction *transaction);
 
-    void CleanUpHelper(const std::unordered_set<void *> &addresses, Transaction *transaction,
-                       std::unordered_map<void *, std::unordered_set<Transaction *>> *map);
+    /**
+     * Add transaction to set of transactions
+     * DO NOT CALL THIS METHOD WITHOUT AN EXCLUSIVE LOCK
+     *
+     * @param address Address to add
+     * @param address_map Map of transaction sets to add address to
+     * @param transaction Transaction to add to transaction set
+     */
+    void
+    AddTransactionToAddressSetWithoutLocking(void *address, std::unordered_map<void *, TransactionSet> &address_map,
+                                             Transaction *transaction);
+
+    /**
+     * Remove transaction from set of transactions
+     * DO NOT CALL THIS METHOD WITHOUT AN EXCLUSIVE LOCK
+     *
+     * @param address_set Set of address from transaction to remove
+     * @param address_map Map of addresses to remove address set from
+     * @param transaction Transaction to remove
+     */
+    void RemoveTransactionFromAddressSetWithoutLocking(const std::unordered_set<void *> &address_set,
+                                                       std::unordered_map<void *, TransactionSet> &address_map,
+                                                       Transaction *transaction);
 };

@@ -5,6 +5,7 @@
 #include <cstring>
 
 #include "transaction_manager.h"
+#include "version_manager.h"
 
 
 struct Undo {
@@ -17,46 +18,35 @@ struct Undo {
 
 using UndoLog = std::unordered_map<void *, Undo>;
 
-class EagerVersionManager {
+class EagerVersionManager : public VersionManager {
 public:
 
     /**
-     * Store undo into undo buffer
-     *
-     * @tparam T type of value to undo
-     * @param address address to undo
-     * @param value value to undo
-     */
-    template<typename T>
-    void Store(T *address, T value) {
-
-        // If we write twice to the same location, we only care about the earliest write
-        if (undo_log_.count(address) == 0) {
-            void *buffered_val = malloc(sizeof(T));
-            std::memcpy(buffered_val, &value, sizeof(T));
-
-            undo_log_.emplace(
-                    std::piecewise_construct,
-                    std::forward_as_tuple(reinterpret_cast<void *>(address)),
-                    std::forward_as_tuple(buffered_val, sizeof(T)));
-        }
-    }
+    * Store undo into undo buffer
+    *
+    * @param address address to undo
+    * @param value value to undo
+    * @param len length of value
+    */
+    void Store(void *address, void *value, size_t len) override;
 
     /**
-     * Retrieve a reference to the undo log of a transaction
-     * @return reference to undo log of transaction
+     * Always returns false
+     * @param address
+     * @param dest
+     * @return false
      */
-    UndoLog &GetUndoLog();
+    bool GetValue(void *address, void *dest);
 
     /**
-     * Abort transaction
+     * AbortWithoutLocks transaction
      */
-    void Abort();
+    void Abort() override;
 
     /**
     * Free all memory related to transaction
     */
-    void XEnd();
+    void XEnd() override;
 
 private:
     UndoLog undo_log_;
