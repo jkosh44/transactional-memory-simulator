@@ -13,7 +13,7 @@ class TransactionManager;
 class Transaction {
 
 public:
-    explicit Transaction(uint64_t transaction_id, TransactionManager *transaction_manager);
+    explicit Transaction(uint64_t transaction_id, TransactionManager *transaction_manager, bool use_lazy_versioning);
 
     /**
      * Store value at address for transaction
@@ -27,16 +27,11 @@ public:
     template<typename T>
     void Store(T *address, T value) {
         if (state_ == ABORTED) {
-            Abort();
+            transaction_manager_->Abort(this);
         }
         transaction_manager_->Store(address, this);
         write_set_.emplace(address);
-#if LAZY_VERSIONING
-        lazy_version_manager_.Store(address, value);
-#else
-        eager_version_manager_.Store(address, value);
-        *address = value;
-#endif
+        version_manager_->Store(address, &value, sizeof(T));
     }
 
     /**
@@ -52,22 +47,21 @@ public:
     template<typename T>
     T Load(T *address) {
         if (state_ == ABORTED) {
-            Abort();
+            transaction_manager_->Abort(this);
         }
         transaction_manager_->Load(address, this);
         read_set_.emplace(address);
-#if LAZY_VERSIONING
         T res;
         // Check if write is in write buffer
-        if (lazy_version_manager_.GetValue(address, &res)) {
+        if (version_manager_->GetValue(address, &res)) {
             return res;
         }
-#endif
         return *address;
     }
 
     /**
      * Abort transaction
+     *
      * @param transaction_id id of transaction
      */
     void Abort();
@@ -115,12 +109,8 @@ public:
 private:
     uint64_t transaction_id_;
     TransactionManager *transaction_manager_;
-#if LAZY_VERSIONING
-    LazyVersionManager
-            lazy_version_manager_;
-#else
-    EagerVersionManager eager_version_manager_;
-#endif
+    std::unique_ptr<VersionManager> version_manager_;
+
     /**
      * Indicates the state of a transaction.
      * 0 - running
@@ -129,7 +119,6 @@ private:
      * TODO try and implement with enum
      */
     std::atomic<int> state_;
-    std::condition_variable abort_cv_;
     std::unordered_set<void *> write_set_;
     std::unordered_set<void *> read_set_;
 

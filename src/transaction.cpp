@@ -1,40 +1,35 @@
 #include <iostream>
 #include "include/transaction.h"
 #include "include/abort_exception.h"
+#include "include/invalid_state_exception.h"
 
-Transaction::Transaction(uint64_t transaction_id, TransactionManager *transaction_manager) :
-        transaction_id_(transaction_id), transaction_manager_(transaction_manager), state_(0) {}
+Transaction::Transaction(uint64_t transaction_id, TransactionManager *transaction_manager,
+                         bool use_lazy_versioning) :
+        transaction_id_(transaction_id), transaction_manager_(transaction_manager), state_(0) {
+    if (use_lazy_versioning) {
+        version_manager_ = std::make_unique<LazyVersionManager>();
+    } else {
+        version_manager_ = std::make_unique<EagerVersionManager>();
+    }
+}
 
 void Transaction::Abort() {
-#if LAZY_VERSIONING
-    lazy_version_manager_.Abort();
-#else
-    eager_version_manager_.Abort();
-#endif
-    transaction_manager_->Abort(this);
-    abort_cv_.notify_all();
-    throw AbortException("Transaction aborted");
+    state_ = ABORTED;
+    version_manager_->Abort();
 }
 
 void Transaction::XEnd() {
     int cur_val = RUNNING;
     bool exchanged = state_.compare_exchange_strong(cur_val, COMMITTING);
     if (!exchanged && cur_val == ABORTED) {
-        Abort();
+        transaction_manager_->Abort(this);
     } else if (!exchanged && cur_val == COMMITTING) {
         std::cerr << "Tried to commit an already committing transaction" << std::endl;
     } else if (exchanged) {
-#if LAZY_VERSIONING
-        auto &write_buffer = lazy_version_manager_.GetWriteBuffer();
-        for (const auto &write : write_buffer) {
-            std::memcpy(write.first, write.second.data_, write.second.size_);
-        }
-        lazy_version_manager_.XEnd();
-#else
-        eager_version_manager_.XEnd();
-#endif
+        transaction_manager_->ResolveConflictsAtCommit(this);
+        version_manager_->XEnd();
+        transaction_manager_->XEnd(this);
     }
-    transaction_manager_->XEnd(this);
 }
 
 uint64_t Transaction::GetTransactionId() const {
@@ -44,14 +39,5 @@ uint64_t Transaction::GetTransactionId() const {
 bool Transaction::MarkAborted() {
     int cur_val = RUNNING;
     bool exchanged = state_.compare_exchange_strong(cur_val, ABORTED);
-#if !LAZY_VERSIONING
-    //if we use eager versioning then we need to wait for the aborting transaction to undo it's write before continuing
-    if (exchanged || cur_val == ABORTED) {
-        // Mutex is sort of pointless but just needed for cv API
-        std::mutex mutex;
-        std::unique_lock<std::mutex> lock(mutex);
-        abort_cv_.wait(lock);
-    }
-#endif
     return exchanged || cur_val == ABORTED;
 }
