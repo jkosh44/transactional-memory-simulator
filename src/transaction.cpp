@@ -16,6 +16,7 @@ Transaction::Transaction(uint64_t transaction_id, TransactionManager *transactio
 void Transaction::Abort() {
     state_ = ABORTED;
     version_manager_->Abort();
+    abort_cv_.notify_all();
 }
 
 void Transaction::XEnd() {
@@ -39,23 +40,26 @@ uint64_t Transaction::GetTransactionId() const {
 bool Transaction::MarkAborted() {
     int cur_val = RUNNING;
     bool exchanged = state_.compare_exchange_strong(cur_val, ABORTED);
-    // If the transaction is stalled we also want to try and abort it
-    if (!exchanged && cur_val == STALLED) {
-        exchanged = state_.compare_exchange_strong(cur_val, ABORTED);
-    }
     return exchanged || cur_val == ABORTED;
+}
+
+bool Transaction::MarkStalledTransactionAborted(std::unique_lock<std::shared_mutex> *exclusive_write_lock,
+                                                std::condition_variable_any *read_stall_cv) {
+    int cur_val = STALLED;
+    bool exchanged = state_.compare_exchange_strong(cur_val, ABORTED);
+    read_stall_cv->notify_all();
+    abort_cv_.wait(*exclusive_write_lock);
+    return exchanged;
 }
 
 bool Transaction::MarkStalled() {
     int cur_val = RUNNING;
     bool exchanged = state_.compare_exchange_strong(cur_val, STALLED);
-    // It shouldn't have been marked stalled twice, but just in case.
-    return exchanged || cur_val == STALLED;
+    return exchanged;
 }
 
 bool Transaction::MarkUnstalled() {
     int cur_val = STALLED;
     bool exchanged = state_.compare_exchange_strong(cur_val, RUNNING);
-    // It shouldn't have been marked unstalled twice, but just in case.
-    return exchanged || cur_val == RUNNING;
+    return exchanged;
 }

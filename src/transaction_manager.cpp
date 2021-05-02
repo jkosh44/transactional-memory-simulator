@@ -63,8 +63,7 @@ void TransactionManager::HandlePessimisticReadConflicts(void *address, Transacti
                                                         Transaction *conflicting_transaction,
                                                         std::unique_lock<std::shared_mutex> *exclusive_write_lock) {
     if (conflict_strategy == ABORT_CONFLICTING_EXPRESSION) {
-        if (!conflicting_transaction->MarkAborted()) {
-            std::unique_lock<std::shared_mutex> exclusive_read_lock(read_set_mutex_);
+        if (!conflicting_transaction->MarkStalledTransactionAborted(exclusive_write_lock, &read_stall_cv_)) {
             AbortWithoutLocks(transaction);
         }
         read_stall_cv_.notify_all();
@@ -73,11 +72,9 @@ void TransactionManager::HandlePessimisticReadConflicts(void *address, Transacti
             read_stall_cv_.wait(*exclusive_write_lock,
                                 [&] { return write_sets_.count(address) == 0 || transaction->IsAborted(); });
             if (transaction->IsAborted() || !transaction->MarkUnstalled()) {
-                std::unique_lock<std::shared_mutex> exclusive_read_lock(read_set_mutex_);
                 AbortWithoutLocks(transaction);
             }
         } else {
-            std::unique_lock<std::shared_mutex> exclusive_read_lock(read_set_mutex_);
             AbortWithoutLocks(transaction);
         }
     } else {
