@@ -272,6 +272,7 @@ void TestCorrectness() {
     WriteOnlyConflictingTest(&transaction_manager1, true, true);
     ReadWriteNonConflictingTest(&transaction_manager1, true, true);
     ReadWriteConflictingTest(&transaction_manager1, true, true);
+
     TransactionManager transaction_manager2(true, false);
 
     ReadOnlyNonConflictingTest(&transaction_manager2, true, false);
