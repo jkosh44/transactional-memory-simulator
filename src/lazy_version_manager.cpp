@@ -29,8 +29,9 @@ bool LazyVersionManager::GetValue(void *address, void *dest) {
 }
 
 void LazyVersionManager::Abort() {
-    // Nothing to do but throw away write buffer
-    XEnd();
+    for (const auto &write : write_buffer_) {
+        free(write.second.data_);
+    }
 }
 
 void LazyVersionManager::XEnd() {

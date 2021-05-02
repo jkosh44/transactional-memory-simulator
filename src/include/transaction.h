@@ -13,6 +13,11 @@ class TransactionManager;
 class Transaction {
 
 public:
+    static constexpr int RUNNING = 0;
+    static constexpr int COMMITTING = 1;
+    static constexpr int ABORTED = 2;
+    static constexpr int STALLED = 3;
+
     explicit Transaction(uint64_t transaction_id, TransactionManager *transaction_manager, bool use_lazy_versioning);
 
     /**
@@ -89,6 +94,15 @@ public:
     bool MarkAborted();
 
     /**
+     * Mark that this transaction has been aborted IFF it's currently stalled
+     *
+     * @param exclusive_write_lock exclusive lock on write sets
+     * @return current state
+     */
+    bool MarkStalledTransactionAborted(std::unique_lock<std::shared_mutex> *exclusive_write_lock,
+                                       std::condition_variable_any *read_stall_cv);
+
+    /**
      * Mark that this transaction is stalled
      *
      * @return true if the transaction was successfully stalled false otherwise
@@ -127,7 +141,7 @@ public:
     const std::unordered_set<void *> &GetReadSet() const { return read_set_; }
 
 private:
-    uint64_t transaction_id_;
+    const uint64_t transaction_id_;
     TransactionManager *transaction_manager_;
     std::unique_ptr<VersionManager> version_manager_;
 
@@ -142,8 +156,5 @@ private:
     std::unordered_set<void *> write_set_;
     std::unordered_set<void *> read_set_;
 
-    static constexpr int RUNNING = 0;
-    static constexpr int COMMITTING = 1;
-    static constexpr int ABORTED = 2;
-    static constexpr int STALLED = 3;
+    std::condition_variable_any abort_cv_;
 };
