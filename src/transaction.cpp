@@ -39,5 +39,23 @@ uint64_t Transaction::GetTransactionId() const {
 bool Transaction::MarkAborted() {
     int cur_val = RUNNING;
     bool exchanged = state_.compare_exchange_strong(cur_val, ABORTED);
+    // If the transaction is stalled we also want to try and abort it
+    if (!exchanged && cur_val == STALLED) {
+        exchanged = state_.compare_exchange_strong(cur_val, ABORTED);
+    }
     return exchanged || cur_val == ABORTED;
+}
+
+bool Transaction::MarkStalled() {
+    int cur_val = RUNNING;
+    bool exchanged = state_.compare_exchange_strong(cur_val, STALLED);
+    // It shouldn't have been marked stalled twice, but just in case.
+    return exchanged || cur_val == STALLED;
+}
+
+bool Transaction::MarkUnstalled() {
+    int cur_val = STALLED;
+    bool exchanged = state_.compare_exchange_strong(cur_val, RUNNING);
+    // It shouldn't have been marked unstalled twice, but just in case.
+    return exchanged || cur_val == RUNNING;
 }

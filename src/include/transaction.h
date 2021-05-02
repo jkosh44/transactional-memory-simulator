@@ -89,10 +89,30 @@ public:
     bool MarkAborted();
 
     /**
+     * Mark that this transaction is stalled
+     *
+     * @return true if the transaction was successfully stalled false otherwise
+     */
+    bool MarkStalled();
+
+    /**
+    * Mark that this transaction is unstalled
+    *
+    * @return true if the transaction was successfully unstalled false otherwise
+    */
+    bool MarkUnstalled();
+
+    /**
      *
      * @return true if aborted, false otherwise
      */
     bool IsAborted() { return state_ == ABORTED; }
+
+    /**
+     *
+     * @return true if stalled, false otherwise
+     */
+    bool IsStalled() { return state_ == STALLED; }
 
     /**
      *
@@ -125,4 +145,5 @@ private:
     static constexpr int RUNNING = 0;
     static constexpr int COMMITTING = 1;
     static constexpr int ABORTED = 2;
+    static constexpr int STALLED = 3;
 };

@@ -91,10 +91,12 @@ private:
      * @param address Address to check for conflicts
      * @param address_map Map of transaction sets to check for conflicts in
      * @param transaction Transaction to check conflicts for
-     * @return true if there are any conflicts false otherwise
+     * @param conflicting_transaction pointer to conflicting transaction
+     * @return 0 if there are no conflicts, -1 if caller should abort conflicting transaction in the case of read
+     * stalls, 1 if caller should stall in the case of read stalls
      */
-    bool CheckForConflictWithoutLocking(void *address, std::unordered_map<void *, TransactionSet> &address_map,
-                                        Transaction *transaction);
+    int CheckForConflictWithoutLocking(void *address, std::unordered_map<void *, TransactionSet> &address_map,
+                                       Transaction *transaction, Transaction **conflicting_transaction = nullptr);
 
     /**
      * Abort all transactions that have a conflict with the current transaction
@@ -106,6 +108,11 @@ private:
      */
     bool AbortTransactionsWithConflictsWithoutLocking(std::unordered_map<void *, TransactionSet> &address_map,
                                                       Transaction *transaction);
+
+
+    void HandlePessimisticReadConflicts(void *address, Transaction *transaction, int conflict_strategy,
+                                        Transaction *conflicting_transaction,
+                                        std::unique_lock<std::shared_mutex> *exclusive_write_lock);
 
     /**
      * Add transaction to set of transactions
