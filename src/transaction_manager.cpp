@@ -5,6 +5,9 @@
 #include "include/invalid_state_exception.h"
 #include "include/abort_exception.h"
 
+static constexpr int ABORT_CONFLICTING_EXPRESSION = -1;
+static constexpr int STALL_TRANSACTION = 1;
+
 TransactionManager::TransactionManager(bool use_lazy_versioning, bool use_pessimistic_conflict_detection)
         : use_lazy_versioning_(use_lazy_versioning),
           use_pessimistic_conflict_detection_(use_pessimistic_conflict_detection),
@@ -44,15 +47,43 @@ void TransactionManager::Store(void *address, Transaction *transaction) {
 
 void TransactionManager::Load(void *address, Transaction *transaction) {
     if (use_pessimistic_conflict_detection_) {
-        std::unique_lock<std::shared_mutex> exclusive_lock(write_set_mutex_);
-        // If there is someone other than the reading transaction, stall until no more writes. If two reads are waiting at
-        // the same time, then only one can proceed
-        if (CheckForConflictWithoutLocking(address, write_sets_, transaction)) {
-            read_stall_cv_.wait(exclusive_lock, [&] { return write_sets_.count(address) == 0; });
+        Transaction *conflicting_transaction;
+        std::unique_lock<std::shared_mutex> exclusive_write_lock(write_set_mutex_);
+        if (int conflict_strategy = CheckForConflictWithoutLocking(address, write_sets_, transaction,
+                                                                   &conflicting_transaction)) {
+            HandlePessimisticReadConflicts(address, transaction, conflict_strategy, conflicting_transaction,
+                                           &exclusive_write_lock);
         }
     }
     std::unique_lock<std::shared_mutex> exclusive_write_lock(read_set_mutex_);
     AddTransactionToAddressSetWithoutLocking(address, read_sets_, transaction);
+}
+
+void TransactionManager::HandlePessimisticReadConflicts(void *address, Transaction *transaction, int conflict_strategy,
+                                                        Transaction *conflicting_transaction,
+                                                        std::unique_lock<std::shared_mutex> *exclusive_write_lock) {
+    if (conflict_strategy == ABORT_CONFLICTING_EXPRESSION) {
+        if (!conflicting_transaction->MarkAborted()) {
+            std::unique_lock<std::shared_mutex> exclusive_read_lock(read_set_mutex_);
+            AbortWithoutLocks(transaction);
+        }
+        read_stall_cv_.notify_all();
+    } else if (conflict_strategy == STALL_TRANSACTION) {
+        if (transaction->MarkStalled()) {
+            read_stall_cv_.wait(*exclusive_write_lock,
+                                [&] { return write_sets_.count(address) == 0 || transaction->IsAborted(); });
+            if (transaction->IsAborted() || !transaction->MarkUnstalled()) {
+                std::unique_lock<std::shared_mutex> exclusive_read_lock(read_set_mutex_);
+                AbortWithoutLocks(transaction);
+            }
+        } else {
+            std::unique_lock<std::shared_mutex> exclusive_read_lock(read_set_mutex_);
+            AbortWithoutLocks(transaction);
+        }
+    } else {
+        std::cerr << "Unknown conflict strategy for read" << std::endl;
+    }
+
 }
 
 void TransactionManager::ResolveConflictsAtCommit(Transaction *transaction) {
@@ -94,23 +125,44 @@ void TransactionManager::AbortWithoutLocks(Transaction *transaction) {
 void TransactionManager::Abort(Transaction *transaction) {
     std::unique_lock<std::shared_mutex> exclusive_write_lock(write_set_mutex_);
     std::unique_lock<std::shared_mutex> exclusive_read_lock(read_set_mutex_);
-    transaction->Abort();
-    RemoveTransactionFromAddressSetWithoutLocking(transaction->GetWriteSet(), write_sets_, transaction);
-    RemoveTransactionFromAddressSetWithoutLocking(transaction->GetReadSet(), read_sets_, transaction);
-
-    read_stall_cv_.notify_all();
-    throw AbortException("Transaction aborted");
+    AbortWithoutLocks(transaction);
 }
 
-bool TransactionManager::CheckForConflictWithoutLocking(void *address,
-                                                        std::unordered_map<void *, TransactionSet> &address_map,
-                                                        Transaction *transaction) {
+int TransactionManager::CheckForConflictWithoutLocking(void *address,
+                                                       std::unordered_map<void *, TransactionSet> &address_map,
+                                                       Transaction *transaction,
+                                                       Transaction **conflicting_transaction) {
     if (address_map.count(address) > 0) {
         auto &transaction_set = address_map.at(address);
         std::shared_lock<std::shared_mutex> transaction_set_lock(transaction_set.transaction_mutex_);
         for (auto *other_transaction : transaction_set.transaction_set_) {
             if (other_transaction != transaction) {
-                return true;
+                if (conflicting_transaction == nullptr) {
+                    return true;
+                } else {
+                    /* Greedy algorithm to avoid deadlocks on read stalls. T0 is transaction and T1 is
+                     * other_transaction. Algorithm as described in the lecture notes is below:
+                     *
+                     * - If T1 has lower priority than T0 or if T1 is waiting for another transaction, then T1 aborts
+                     * when conflicting with T0.
+                     * - If T1 has higher priority than T0 and is not waiting, then T0 waits until T1 commits, aborts,
+                     * or starts waiting (in which case the first rule is applied).
+                     *
+                     * I made the following changes to avoid excessive aborts:
+                     *
+                     * - If T1 is waiting for another transaction, then T1 aborts when conflicting with T0.
+                     * - If T1 is not waiting, then T0 waits until T1 commits, aborts, or starts waiting (in which case
+                     * the first rule is applied).
+                     */
+                    *conflicting_transaction = other_transaction;
+                    bool has_lower_priority = other_transaction->GetTransactionId() < transaction->GetTransactionId();
+                    bool is_stalled = other_transaction->IsStalled();
+                    if (is_stalled) {
+                        return ABORT_CONFLICTING_EXPRESSION;
+                    } else {
+                        return STALL_TRANSACTION;
+                    }
+                }
             }
         }
     }

@@ -274,12 +274,31 @@ void ReadWriteConflicting(TransactionManager *transaction_manager) {
 }
 
 int main(int argc, char *argv[]) {
-    TransactionManager transaction_manager(false, true);
 
-    ReadOnlyNonConflicting(&transaction_manager);
-    ReadOnlyConflicting(&transaction_manager);
-    WriteOnlyNonConflicting(&transaction_manager);
-    WriteOnlyConflicting(&transaction_manager);
-    ReadWriteNonConflicting(&transaction_manager);
-    ReadWriteConflicting(&transaction_manager);
+    TransactionManager transaction_manager1(true, true);
+
+    ReadOnlyNonConflicting(&transaction_manager1);
+    ReadOnlyConflicting(&transaction_manager1);
+    WriteOnlyNonConflicting(&transaction_manager1);
+    WriteOnlyConflicting(&transaction_manager1);
+    ReadWriteNonConflicting(&transaction_manager1);
+    ReadWriteConflicting(&transaction_manager1);
+
+    TransactionManager transaction_manager2(true, false);
+
+    ReadOnlyNonConflicting(&transaction_manager2);
+    ReadOnlyConflicting(&transaction_manager2);
+    WriteOnlyNonConflicting(&transaction_manager2);
+    WriteOnlyConflicting(&transaction_manager2);
+    ReadWriteNonConflicting(&transaction_manager2);
+    ReadWriteConflicting(&transaction_manager2);
+
+    TransactionManager transaction_manager3(false, true);
+
+    ReadOnlyNonConflicting(&transaction_manager3);
+    ReadOnlyConflicting(&transaction_manager3);
+    WriteOnlyNonConflicting(&transaction_manager3);
+    WriteOnlyConflicting(&transaction_manager3);
+    ReadWriteNonConflicting(&transaction_manager3);
+    ReadWriteConflicting(&transaction_manager3);
 }
