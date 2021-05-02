@@ -108,7 +108,17 @@ private:
     bool AbortTransactionsWithConflictsWithoutLocking(std::unordered_map<void *, TransactionSet> &address_map,
                                                       Transaction *transaction);
 
-    bool HandlePessimisticReadConflicts(void *address, Transaction *transaction);
+    /**
+     * Handle conflicts for transactions trying to read. Will either abort conflicting transactions, stall current
+     * transaction, abort current transaction or do nothing.
+     *
+     * @param address Address to check for conflicts at
+     * @param transaction Transaction to check for conflicts
+     * @param exclusive_write_lock Acquired lock on write sets
+     * @return
+     */
+    bool HandlePessimisticReadConflicts(void *address, Transaction *transaction,
+                                        std::unique_lock<std::shared_mutex> *exclusive_write_lock);
 
     /**
      * Add transaction to set of transactions

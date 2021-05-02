@@ -1,4 +1,5 @@
 #include <iostream>
+#include <cassert>
 #include "include/transaction_manager.h"
 
 #include "include/transaction.h"
@@ -47,56 +48,46 @@ void TransactionManager::Store(void *address, Transaction *transaction) {
 
 void TransactionManager::Load(void *address, Transaction *transaction) {
     if (use_pessimistic_conflict_detection_) {
-        while (!HandlePessimisticReadConflicts(address, transaction)) {}
+        std::unique_lock<std::shared_mutex> exclusive_write_lock(write_set_mutex_);
+        while (!HandlePessimisticReadConflicts(address, transaction, &exclusive_write_lock)) {}
     }
     std::unique_lock<std::shared_mutex> exclusive_write_lock(read_set_mutex_);
     AddTransactionToAddressSetWithoutLocking(address, read_sets_, transaction);
 }
 
-bool TransactionManager::HandlePessimisticReadConflicts(void *address, Transaction *transaction) {
-    std::unique_lock<std::shared_mutex> exclusive_write_lock(write_set_mutex_);
+/* Greedy algorithm to avoid deadlocks on read stalls. T0 is transaction and T1 is
+ * other_transaction. Algorithm as described in the lecture notes is below:
+ *
+ * - If T1 has lower priority than T0 or if T1 is waiting for another transaction, then T1 aborts
+ * when conflicting with T0.
+ * - If T1 has higher priority than T0 and is not waiting, then T0 waits until T1 commits, aborts,
+ * or starts waiting (in which case the first rule is applied).
+ *
+ * I made the following changes to avoid excessive aborts:
+ *
+ * - If T1 is waiting for another transaction, then T1 aborts when conflicting with T0.
+ * - If T1 is not waiting, then T0 waits until T1 commits, aborts, or starts waiting (in which case
+ * the first rule is applied).
+ */
+bool TransactionManager::HandlePessimisticReadConflicts(void *address, Transaction *transaction,
+                                                        std::unique_lock<std::shared_mutex> *exclusive_write_lock) {
     if (write_sets_.count(address) > 0) {
         auto &transaction_set = write_sets_.at(address);
-        std::shared_lock<std::shared_mutex> transaction_set_lock(transaction_set.transaction_mutex_);
         for (auto *other_transaction : transaction_set.transaction_set_) {
             if (other_transaction != transaction) {
-                /* Greedy algorithm to avoid deadlocks on read stalls. T0 is transaction and T1 is
-                 * other_transaction. Algorithm as described in the lecture notes is below:
-                 *
-                 * - If T1 has lower priority than T0 or if T1 is waiting for another transaction, then T1 aborts
-                 * when conflicting with T0.
-                 * - If T1 has higher priority than T0 and is not waiting, then T0 waits until T1 commits, aborts,
-                 * or starts waiting (in which case the first rule is applied).
-                 *
-                 * I made the following changes to avoid excessive aborts:
-                 *
-                 * - If T1 is waiting for another transaction, then T1 aborts when conflicting with T0.
-                 * - If T1 is not waiting, then T0 waits until T1 commits, aborts, or starts waiting (in which case
-                 * the first rule is applied).
-                 */
-                if (other_transaction->IsStalled()) {
-                    transaction_set_lock.unlock();
-                    if (!other_transaction->MarkStalledTransactionAborted(&exclusive_write_lock,
-                                                                          &read_stall_cv_)) {
+                if (!other_transaction->MarkStalledTransactionAborted(exclusive_write_lock, &read_stall_cv_)) {
+                    if (!transaction->MarkStalled()) {
+                        std::unique_lock<std::shared_mutex> exclusive_read_lock(read_set_mutex_);
                         AbortWithoutLocks(transaction);
                     }
-                    read_stall_cv_.notify_all();
-                    return false;
-                } else {
-                    transaction_set_lock.unlock();
-                    if (transaction->MarkStalled()) {
-                        read_stall_cv_.wait(exclusive_write_lock,
-                                            [&] {
-                                                return write_sets_.count(address) == 0 || transaction->IsAborted();
-                                            });
-                        if (transaction->IsAborted() || !transaction->MarkUnstalled()) {
-                            AbortWithoutLocks(transaction);
-                        }
-                    } else {
+                    read_stall_cv_.wait(*exclusive_write_lock,
+                                        [&] { return write_sets_.count(address) == 0 || transaction->IsAborted(); });
+                    if (transaction->IsAborted() || !transaction->MarkUnstalled()) {
+                        std::unique_lock<std::shared_mutex> exclusive_read_lock(read_set_mutex_);
                         AbortWithoutLocks(transaction);
                     }
-                    return false;
                 }
+                return false;
             }
         }
     }

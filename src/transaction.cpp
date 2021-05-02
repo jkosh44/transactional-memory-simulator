@@ -49,8 +49,7 @@ bool Transaction::MarkStalledTransactionAborted(std::unique_lock<std::shared_mut
     bool exchanged = state_.compare_exchange_strong(cur_val, ABORTED);
     if (exchanged) {
         read_stall_cv->notify_all();
-
-        //abort_cv_.wait(*exclusive_write_lock);
+        abort_cv_.wait(*exclusive_write_lock);
     }
     return exchanged;
 }

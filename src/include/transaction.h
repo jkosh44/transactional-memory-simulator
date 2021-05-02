@@ -61,7 +61,6 @@ public:
         if (version_manager_->GetValue(address, &res)) {
             return res;
         }
-        // TODO aborted here then we SHOULD NOT return address... I think?
         return *address;
     }
 
@@ -142,7 +141,7 @@ public:
     const std::unordered_set<void *> &GetReadSet() const { return read_set_; }
 
 private:
-    uint64_t transaction_id_;
+    const uint64_t transaction_id_;
     TransactionManager *transaction_manager_;
     std::unique_ptr<VersionManager> version_manager_;
 
