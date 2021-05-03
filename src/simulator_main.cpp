@@ -25,11 +25,13 @@ int RunTransaction(TransactionManager *transaction_manager, const std::function<
     return aborts;
 }
 
-int
+TransactionRunDetails
 RunAsyncTransactions(TransactionManager *transaction_manager, std::vector<std::function<void(Transaction *)>> funcs) {
     std::vector<std::future<int>> futures;
     futures.reserve(funcs.size());
-    int aborts = 0;
+    size_t aborts = 0;
+
+    auto start = std::chrono::high_resolution_clock::now();
     for (const auto &func : funcs) {
         futures.push_back(std::async(RunTransaction, transaction_manager, func));
     }
@@ -37,8 +39,8 @@ RunAsyncTransactions(TransactionManager *transaction_manager, std::vector<std::f
     for (auto &future : futures) {
         aborts += future.get();
     }
-
-    return aborts;
+    return {aborts, static_cast<size_t>(std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::high_resolution_clock::now() - start).count())};
 }
 
 std::unordered_map<std::string, double> GetTestMap() {
@@ -53,6 +55,7 @@ std::unordered_map<std::string, double> GetTestMap() {
 }
 
 void ReadOnlyNonConflicting(TransactionManager *transaction_manager) {
+    std::cout << "Read only non conflicting" << std::endl;
     auto map = GetTestMap();
     auto read1 = [&](Transaction *transaction) {
         auto joe = transaction->Load(&map.find("Joe")->second);
@@ -67,14 +70,19 @@ void ReadOnlyNonConflicting(TransactionManager *transaction_manager) {
         auto popo = transaction->Load(&map.find("Popo")->second);
     };
 
-    int aborts = 0;
+    size_t aborts = 0;
+    size_t time = 0;
     for (int i = 0; i < 1000; i++) {
-        aborts += RunAsyncTransactions(transaction_manager, {read1, read2, read3});
+        auto[new_aborts, new_time] = RunAsyncTransactions(transaction_manager, {read1, read2, read3});
+        aborts += new_aborts;
+        time += new_time;
     }
-    std::cout << aborts << std::endl;
+    std::cout << "Aborts: " << aborts << std::endl;
+    std::cout << "Time (micro seconds): " << time << std::endl;
 }
 
 void ReadOnlyConflicting(TransactionManager *transaction_manager) {
+    std::cout << "Read only conflicting" << std::endl;
     auto map = GetTestMap();
     auto read1 = [&](Transaction *transaction) {
         auto joe = transaction->Load(&map.find("Joe")->second);
@@ -101,14 +109,19 @@ void ReadOnlyConflicting(TransactionManager *transaction_manager) {
         auto aparna = transaction->Load(&map.find("Aparna")->second);
     };
 
-    int aborts = 0;
+    size_t aborts = 0;
+    size_t time = 0;
     for (int i = 0; i < 1000; i++) {
-        aborts += RunAsyncTransactions(transaction_manager, {read1, read2, read3});
+        auto[new_aborts, new_time] = RunAsyncTransactions(transaction_manager, {read1, read2, read3});
+        aborts += new_aborts;
+        time += new_time;
     }
-    std::cout << aborts << std::endl;
+    std::cout << "Aborts: " << aborts << std::endl;
+    std::cout << "Time (micro seconds): " << time << std::endl;
 }
 
 void WriteOnlyNonConflicting(TransactionManager *transaction_manager) {
+    std::cout << "Write only non conflicting" << std::endl;
     auto map = GetTestMap();
     auto read1 = [&](Transaction *transaction) {
         transaction->Store(&map.find("Joe")->second, 2345.12);
@@ -123,14 +136,19 @@ void WriteOnlyNonConflicting(TransactionManager *transaction_manager) {
         transaction->Store(&map.find("Popo")->second, 2394.56);
     };
 
-    int aborts = 0;
+    size_t aborts = 0;
+    size_t time = 0;
     for (int i = 0; i < 1000; i++) {
-        aborts += RunAsyncTransactions(transaction_manager, {read1, read2, read3});
+        auto[new_aborts, new_time] = RunAsyncTransactions(transaction_manager, {read1, read2, read3});
+        aborts += new_aborts;
+        time += new_time;
     }
-    std::cout << aborts << std::endl;
+    std::cout << "Aborts: " << aborts << std::endl;
+    std::cout << "Time (micro seconds): " << time << std::endl;
 }
 
 void WriteOnlyConflicting(TransactionManager *transaction_manager) {
+    std::cout << "Write only conflicting" << std::endl;
     auto map = GetTestMap();
     auto read1 = [&](Transaction *transaction) {
         transaction->Store(&map.find("Joe")->second, 2345.12);
@@ -157,14 +175,19 @@ void WriteOnlyConflicting(TransactionManager *transaction_manager) {
         transaction->Store(&map.find("Aparna")->second, 203.53);
     };
 
-    int aborts = 0;
+    size_t aborts = 0;
+    size_t time = 0;
     for (int i = 0; i < 1000; i++) {
-        aborts += RunAsyncTransactions(transaction_manager, {read1, read2, read3});
+        auto[new_aborts, new_time] = RunAsyncTransactions(transaction_manager, {read1, read2, read3});
+        aborts += new_aborts;
+        time += new_time;
     }
-    std::cout << aborts << std::endl;
+    std::cout << "Aborts: " << aborts << std::endl;
+    std::cout << "Time (micro seconds): " << time << std::endl;
 }
 
 void ReadWriteNonConflicting(TransactionManager *transaction_manager) {
+    std::cout << "Read write non conflicting" << std::endl;
     auto map = GetTestMap();
     auto read1 = [&](Transaction *transaction) {
         double diff = 20.05;
@@ -191,14 +214,19 @@ void ReadWriteNonConflicting(TransactionManager *transaction_manager) {
         transaction->Store(&map.find("Popo")->second, popo_balance + diff);
     };
 
-    int aborts = 0;
+    size_t aborts = 0;
+    size_t time = 0;
     for (int i = 0; i < 1000; i++) {
-        aborts += RunAsyncTransactions(transaction_manager, {read1, read2, read3});
+        auto[new_aborts, new_time] = RunAsyncTransactions(transaction_manager, {read1, read2, read3});
+        aborts += new_aborts;
+        time += new_time;
     }
-    std::cout << aborts << std::endl;
+    std::cout << "Aborts: " << aborts << std::endl;
+    std::cout << "Time (micro seconds): " << time << std::endl;
 }
 
 void ReadWriteConflicting(TransactionManager *transaction_manager) {
+    std::cout << "Read write conflicting" << std::endl;
     auto map = GetTestMap();
     auto read1 = [&](Transaction *transaction) {
         double diff = 20.05;
@@ -267,11 +295,15 @@ void ReadWriteConflicting(TransactionManager *transaction_manager) {
         transaction->Store(&map.find("Aparna")->second, aparna_balance + diff);
     };
 
-    int aborts = 0;
+    size_t aborts = 0;
+    size_t time = 0;
     for (int i = 0; i < 1000; i++) {
-        aborts += RunAsyncTransactions(transaction_manager, {read1, read2, read3});
+        auto[new_aborts, new_time] = RunAsyncTransactions(transaction_manager, {read1, read2, read3});
+        aborts += new_aborts;
+        time += new_time;
     }
-    std::cout << aborts << std::endl;
+    std::cout << "Aborts: " << aborts << std::endl;
+    std::cout << "Time (micro seconds): " << time << std::endl;
 }
 
 int main(int argc, char *argv[]) {
@@ -279,6 +311,8 @@ int main(int argc, char *argv[]) {
     TestCorrectness();
 
     TransactionManager transaction_manager1(true, true);
+
+    std::cout << std::endl << "LAZY VERSIONING and PESSIMISTIC CONFLICT DETECTION" << std::endl;
 
     ReadOnlyNonConflicting(&transaction_manager1);
     ReadOnlyConflicting(&transaction_manager1);
@@ -289,6 +323,8 @@ int main(int argc, char *argv[]) {
 
     TransactionManager transaction_manager2(true, false);
 
+    std::cout << std::endl << "LAZY VERSIONING and OPTIMISTIC CONFLICT DETECTION" << std::endl;
+
     ReadOnlyNonConflicting(&transaction_manager2);
     ReadOnlyConflicting(&transaction_manager2);
     WriteOnlyNonConflicting(&transaction_manager2);
@@ -297,6 +333,8 @@ int main(int argc, char *argv[]) {
     ReadWriteConflicting(&transaction_manager2);
 
     TransactionManager transaction_manager3(false, true);
+
+    std::cout << std::endl << "EAGER VERSIONING and PESSIMISTIC CONFLICT DETECTION" << std::endl;
 
     ReadOnlyNonConflicting(&transaction_manager3);
     ReadOnlyConflicting(&transaction_manager3);

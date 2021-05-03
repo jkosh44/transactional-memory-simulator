@@ -3,6 +3,13 @@
 #include <functional>
 #include "transaction_manager.h"
 
+struct TransactionRunDetails {
+    TransactionRunDetails(size_t aborts, size_t time_taken) : aborts_(aborts), time_taken_(time_taken) {}
+
+    size_t aborts_;
+    size_t time_taken_;
+};
+
 int main(int argc, char *argv[]);
 
 /**
@@ -19,9 +26,9 @@ int RunTransaction(TransactionManager *transaction_manager, const std::function<
  *
  * @param transaction_manager transaction manager
  * @param funcs functions to run asynchronously
- * @return number of aborts
+ * @return number of aborts and time taken
  */
-int
+TransactionRunDetails
 RunAsyncTransactions(TransactionManager *transaction_manager, std::vector<std::function<void(Transaction *)>> funcs);
 
 std::unordered_map<std::string, double> GetTestMap();
