@@ -6,8 +6,6 @@
 #include "include/invalid_state_exception.h"
 #include "include/abort_exception.h"
 
-static constexpr int ABORT_CONFLICTING_EXPRESSION = -1;
-static constexpr int STALL_TRANSACTION = 1;
 
 TransactionManager::TransactionManager(bool use_lazy_versioning, bool use_pessimistic_conflict_detection)
         : use_lazy_versioning_(use_lazy_versioning),
@@ -26,15 +24,19 @@ Transaction TransactionManager::XBegin() {
 void TransactionManager::Store(void *address, Transaction *transaction) {
     if (use_pessimistic_conflict_detection_) {
         std::unique_lock<std::shared_mutex> exclusive_write_lock(write_set_mutex_);
-        std::unique_lock<std::shared_mutex> exclusive_read_lock(read_set_mutex_);
 
         // Check for write conflicts - Writer loses
         if (CheckForConflictWithoutLocking(address, write_sets_, transaction)) {
+            std::unique_lock<std::shared_mutex> exclusive_read_lock(read_set_mutex_);
             AbortWithoutLocks(transaction);
             return;
         }
+
         // Check for read conflicts - Writer loses
+        std::shared_lock<std::shared_mutex> shared_read_lock(read_set_mutex_);
         if (CheckForConflictWithoutLocking(address, read_sets_, transaction)) {
+            shared_read_lock.unlock();
+            std::unique_lock<std::shared_mutex> exclusive_read_lock(read_set_mutex_);
             AbortWithoutLocks(transaction);
             return;
         }
@@ -96,16 +98,20 @@ bool TransactionManager::HandlePessimisticReadConflicts(void *address, Transacti
 
 void TransactionManager::ResolveConflictsAtCommit(Transaction *transaction) {
     if (!use_pessimistic_conflict_detection_) {
-        std::unique_lock<std::shared_mutex> exclusive_write_lock(write_set_mutex_);
-        std::unique_lock<std::shared_mutex> exclusive_read_lock(read_set_mutex_);
+        {
+            std::shared_lock<std::shared_mutex> shared_write_lock(write_set_mutex_);
 
-        if (!AbortTransactionsWithConflictsWithoutLocking(write_sets_, transaction)) {
-            AbortWithoutLocks(transaction);
-            return;
+            if (!AbortTransactionsWithConflictsWithoutLocking(write_sets_, transaction)) {
+                shared_write_lock.unlock();
+                Abort(transaction);
+                return;
+            }
         }
 
+        std::shared_lock<std::shared_mutex> shared_read_lock(read_set_mutex_);
         if (!AbortTransactionsWithConflictsWithoutLocking(read_sets_, transaction)) {
-            AbortWithoutLocks(transaction);
+            shared_read_lock.unlock();
+            Abort(transaction);
             return;
         }
     }
@@ -179,8 +185,6 @@ void TransactionManager::AddTransactionToAddressSetWithoutLocking(void *address,
                 std::forward_as_tuple());
     }
     auto &transaction_set = address_map.at(address);
-    // TODO probably unnecessary since we have an exclusive lock on the entire map
-    std::unique_lock<std::shared_mutex> transaction_set_lock(transaction_set.transaction_mutex_);
     transaction_set.transaction_set_.emplace(transaction);
 }
 
