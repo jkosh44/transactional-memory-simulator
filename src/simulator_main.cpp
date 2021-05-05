@@ -72,7 +72,7 @@ void ReadOnlyNonConflicting(TransactionManager *transaction_manager) {
 
     size_t aborts = 0;
     size_t time = 0;
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i < 10000; i++) {
         auto[new_aborts, new_time] = RunAsyncTransactions(transaction_manager, {read1, read2, read3});
         aborts += new_aborts;
         time += new_time;
@@ -111,7 +111,7 @@ void ReadOnlyConflicting(TransactionManager *transaction_manager) {
 
     size_t aborts = 0;
     size_t time = 0;
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i < 10000; i++) {
         auto[new_aborts, new_time] = RunAsyncTransactions(transaction_manager, {read1, read2, read3});
         aborts += new_aborts;
         time += new_time;
@@ -138,7 +138,7 @@ void WriteOnlyNonConflicting(TransactionManager *transaction_manager) {
 
     size_t aborts = 0;
     size_t time = 0;
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i < 10000; i++) {
         auto[new_aborts, new_time] = RunAsyncTransactions(transaction_manager, {read1, read2, read3});
         aborts += new_aborts;
         time += new_time;
@@ -177,7 +177,7 @@ void WriteOnlyConflicting(TransactionManager *transaction_manager) {
 
     size_t aborts = 0;
     size_t time = 0;
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i < 10000; i++) {
         auto[new_aborts, new_time] = RunAsyncTransactions(transaction_manager, {read1, read2, read3});
         aborts += new_aborts;
         time += new_time;
@@ -216,7 +216,7 @@ void ReadWriteNonConflicting(TransactionManager *transaction_manager) {
 
     size_t aborts = 0;
     size_t time = 0;
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i < 10000; i++) {
         auto[new_aborts, new_time] = RunAsyncTransactions(transaction_manager, {read1, read2, read3});
         aborts += new_aborts;
         time += new_time;
@@ -297,7 +297,7 @@ void ReadWriteConflicting(TransactionManager *transaction_manager) {
 
     size_t aborts = 0;
     size_t time = 0;
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i < 10000; i++) {
         auto[new_aborts, new_time] = RunAsyncTransactions(transaction_manager, {read1, read2, read3});
         aborts += new_aborts;
         time += new_time;
