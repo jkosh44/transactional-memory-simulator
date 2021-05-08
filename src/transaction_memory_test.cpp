@@ -16,6 +16,21 @@ void assert_double_equals(double a, double b, bool use_lazy_versioning, bool use
     }
 }
 
+std::unordered_map<std::string, double> GetTestMap() {
+    std::unordered_map<std::string, double> map;
+
+    map["Joe"] = 666.42;
+    map["Mike"] = 33.21;
+
+    map["Sam"] = 20.14;
+    map["Aparna"] = 52.37;
+
+    map["Nana"] = 100.32;
+    map["Popo"] = 500.68;
+
+    return map;
+}
+
 void ReadOnlyNonConflictingTest(TransactionManager *transaction_manager, bool use_lazy_versioning,
                                 bool use_pessimistic_conflict_detection) {
     auto map = GetTestMap();

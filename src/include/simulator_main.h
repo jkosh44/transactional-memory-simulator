@@ -26,9 +26,13 @@ int RunTransaction(TransactionManager *transaction_manager, const std::function<
  *
  * @param transaction_manager transaction manager
  * @param funcs functions to run asynchronously
+ * @param iterations how many times to run each function
  * @return number of aborts and time taken
  */
 TransactionRunDetails
-RunAsyncTransactions(TransactionManager *transaction_manager, std::vector<std::function<void(Transaction *)>> funcs);
+RunAsyncTransactions(TransactionManager *transaction_manager, std::vector<std::function<void(Transaction *)>> funcs,
+                     int iterations = 1);
 
-std::unordered_map<std::string, double> GetTestMap();
+std::unordered_map<std::string, double> GetTestAccounts(size_t size);
+
+std::vector<double *> GetAccountAddresses(std::unordered_map<std::string, double> map);

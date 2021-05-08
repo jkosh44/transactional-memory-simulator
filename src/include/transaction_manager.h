@@ -25,7 +25,7 @@ public:
 
     /**
      * Begin memory transaction
-     * @return transaction id
+     * @return transaction
      */
     Transaction XBegin();
 
