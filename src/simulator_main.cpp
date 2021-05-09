@@ -9,6 +9,13 @@
 #include "include/abort_exception.h"
 #include "include/transaction_memory_test.h"
 
+static constexpr int READ_CONCURRENT_TRANSACTIONS = 10000;
+static constexpr int READ_ITERATIONS = 10;
+static constexpr int WRITE_CONCURRENT_TRANSACTIONS = 20;
+static constexpr int WRITE_ITERATIONS = 10000;
+static constexpr int READ_WRITE_CONCURRENT_TRANSACTIONS = 20;
+static constexpr int READ_WRITE_ITERATIONS = 1000;
+
 int RunTransaction(TransactionManager *transaction_manager, const std::function<void(Transaction *)> &func) {
     int aborts = 0;
     bool success = false;
@@ -26,282 +33,199 @@ int RunTransaction(TransactionManager *transaction_manager, const std::function<
 }
 
 TransactionRunDetails
-RunAsyncTransactions(TransactionManager *transaction_manager, std::vector<std::function<void(Transaction *)>> funcs) {
-    std::vector<std::future<int>> futures;
-    futures.reserve(funcs.size());
+RunAsyncTransactions(TransactionManager *transaction_manager, std::vector<std::function<void(Transaction *)>> funcs,
+                     int iterations) {
     size_t aborts = 0;
+    size_t time = 0;
 
-    auto start = std::chrono::high_resolution_clock::now();
-    for (const auto &func : funcs) {
-        futures.push_back(std::async(RunTransaction, transaction_manager, func));
-    }
+    for (int i = 0; i < iterations; i++) {
+        std::vector<std::future<int>> futures;
+        futures.reserve(funcs.size());
+        auto start = std::chrono::high_resolution_clock::now();
+        for (const auto &func : funcs) {
+            futures.push_back(std::async(RunTransaction, transaction_manager, func));
+        }
 
-    for (auto &future : futures) {
-        aborts += future.get();
+
+        for (auto &future : futures) {
+            future.wait();
+            aborts += future.get();
+        }
+        time += static_cast<size_t>(std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::high_resolution_clock::now() - start).count());
     }
-    return {aborts, static_cast<size_t>(std::chrono::duration_cast<std::chrono::microseconds>(
-            std::chrono::high_resolution_clock::now() - start).count())};
+    return {aborts, time};
 }
 
-std::unordered_map<std::string, double> GetTestMap() {
+/*
+ * Adapted from https://stackoverflow.com/questions/440133/how-do-i-create-a-random-alpha-numeric-string-in-c to generate random map keys
+ */
+std::string RandomString() {
+    size_t length = 100;
+    auto randchar = []() -> char {
+        const char charset[] =
+                "0123456789"
+                "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                "abcdefghijklmnopqrstuvwxyz";
+        const size_t max_index = (sizeof(charset) - 1);
+        return charset[rand() % max_index];
+    };
+    std::string str(length, 0);
+    std::generate_n(str.begin(), length, randchar);
+    return str;
+}
+
+double RandomFloat() {
+    return static_cast<double>(rand()) / (static_cast<double>(RAND_MAX / 10000.0));
+}
+
+
+std::unordered_map<std::string, double> GetTestAccounts(size_t size) {
     std::unordered_map<std::string, double> map;
-    map["Joe"] = 666.42;
-    map["Mike"] = 33.21;
-    map["Sam"] = 20.14;
-    map["Aparna"] = 52.37;
-    map["Nana"] = 100.32;
-    map["Popo"] = 500.68;
+
+    while (map.size() < size) {
+        map[RandomString()] = RandomFloat();
+    }
+
     return map;
+}
+
+std::vector<double *> GetAccountAddresses(std::unordered_map<std::string, double> map) {
+    std::vector<double *> res;
+    res.reserve(map.size());
+    for (auto &account : map) {
+        res.emplace_back(&account.second);
+    }
+    return res;
 }
 
 void ReadOnlyNonConflicting(TransactionManager *transaction_manager) {
     std::cout << "Read only non conflicting" << std::endl;
-    auto map = GetTestMap();
-    auto read1 = [&](Transaction *transaction) {
-        auto joe = transaction->Load(&map.find("Joe")->second);
-        auto aparna = transaction->Load(&map.find("Aparna")->second);
-    };
-    auto read2 = [&](Transaction *transaction) {
-        auto nana = transaction->Load(&map.find("Nana")->second);
-        auto Mike = transaction->Load(&map.find("Mike")->second);
-    };
-    auto read3 = [&](Transaction *transaction) {
-        auto sam = transaction->Load(&map.find("Sam")->second);
-        auto popo = transaction->Load(&map.find("Popo")->second);
-    };
-
-    size_t aborts = 0;
-    size_t time = 0;
-    for (int i = 0; i < 1000; i++) {
-        auto[new_aborts, new_time] = RunAsyncTransactions(transaction_manager, {read1, read2, read3});
-        aborts += new_aborts;
-        time += new_time;
+    auto accounts_map = GetTestAccounts(2 * READ_CONCURRENT_TRANSACTIONS);
+    auto accounts = GetAccountAddresses(accounts_map);
+    std::vector<std::function<void(Transaction *)>> funcs;
+    funcs.reserve(READ_CONCURRENT_TRANSACTIONS);
+    size_t len = accounts.size();
+    for (size_t i = 0; i < len - 1; i += 2) {
+        funcs.emplace_back([=](Transaction *transaction) {
+            auto a = transaction->Load(accounts[i]);
+            auto b = transaction->Load(accounts[i + 1]);
+        });
     }
+
+    auto[aborts, time] = RunAsyncTransactions(transaction_manager, funcs, READ_ITERATIONS);
+
     std::cout << "Aborts: " << aborts << std::endl;
     std::cout << "Time (micro seconds): " << time << std::endl;
 }
 
 void ReadOnlyConflicting(TransactionManager *transaction_manager) {
     std::cout << "Read only conflicting" << std::endl;
-    auto map = GetTestMap();
-    auto read1 = [&](Transaction *transaction) {
-        auto joe = transaction->Load(&map.find("Joe")->second);
-        auto aparna = transaction->Load(&map.find("Aparna")->second);
-        auto nana = transaction->Load(&map.find("Nana")->second);
-        auto Mike = transaction->Load(&map.find("Mike")->second);
-        auto sam = transaction->Load(&map.find("Sam")->second);
-        auto popo = transaction->Load(&map.find("Popo")->second);
-    };
-    auto read2 = [&](Transaction *transaction) {
-        auto nana = transaction->Load(&map.find("Nana")->second);
-        auto Mike = transaction->Load(&map.find("Mike")->second);
-        auto joe = transaction->Load(&map.find("Joe")->second);
-        auto aparna = transaction->Load(&map.find("Aparna")->second);
-        auto sam = transaction->Load(&map.find("Sam")->second);
-        auto popo = transaction->Load(&map.find("Popo")->second);
-    };
-    auto read3 = [&](Transaction *transaction) {
-        auto sam = transaction->Load(&map.find("Sam")->second);
-        auto popo = transaction->Load(&map.find("Popo")->second);
-        auto nana = transaction->Load(&map.find("Nana")->second);
-        auto Mike = transaction->Load(&map.find("Mike")->second);
-        auto joe = transaction->Load(&map.find("Joe")->second);
-        auto aparna = transaction->Load(&map.find("Aparna")->second);
-    };
-
-    size_t aborts = 0;
-    size_t time = 0;
-    for (int i = 0; i < 1000; i++) {
-        auto[new_aborts, new_time] = RunAsyncTransactions(transaction_manager, {read1, read2, read3});
-        aborts += new_aborts;
-        time += new_time;
+    auto accounts_map = GetTestAccounts(2 * READ_CONCURRENT_TRANSACTIONS);
+    auto accounts = GetAccountAddresses(accounts_map);
+    std::vector<std::function<void(Transaction *)>> funcs;
+    funcs.reserve(READ_CONCURRENT_TRANSACTIONS);
+    for (size_t i = 0; i < accounts.size() - 1; i += 2) {
+        funcs.emplace_back([&](Transaction *transaction) {
+            for (auto &account : accounts) {
+                auto a = transaction->Load(account);
+            }
+        });
     }
+
+    auto[aborts, time] = RunAsyncTransactions(transaction_manager, funcs, READ_ITERATIONS);
+
     std::cout << "Aborts: " << aborts << std::endl;
     std::cout << "Time (micro seconds): " << time << std::endl;
 }
 
 void WriteOnlyNonConflicting(TransactionManager *transaction_manager) {
     std::cout << "Write only non conflicting" << std::endl;
-    auto map = GetTestMap();
-    auto read1 = [&](Transaction *transaction) {
-        transaction->Store(&map.find("Joe")->second, 2345.12);
-        transaction->Store(&map.find("Aparna")->second, 203.53);
-    };
-    auto read2 = [&](Transaction *transaction) {
-        transaction->Store(&map.find("Nana")->second, 435.23);
-        transaction->Store(&map.find("Mike")->second, 104.21);
-    };
-    auto read3 = [&](Transaction *transaction) {
-        transaction->Store(&map.find("Sam")->second, 123.43);
-        transaction->Store(&map.find("Popo")->second, 2394.56);
-    };
-
-    size_t aborts = 0;
-    size_t time = 0;
-    for (int i = 0; i < 1000; i++) {
-        auto[new_aborts, new_time] = RunAsyncTransactions(transaction_manager, {read1, read2, read3});
-        aborts += new_aborts;
-        time += new_time;
+    auto accounts_map = GetTestAccounts(2 * WRITE_CONCURRENT_TRANSACTIONS);
+    auto accounts = GetAccountAddresses(accounts_map);
+    std::vector<std::function<void(Transaction *)>> funcs;
+    funcs.reserve(WRITE_CONCURRENT_TRANSACTIONS);
+    for (size_t i = 0; i < accounts.size() - 1; i += 2) {
+        funcs.emplace_back([=](Transaction *transaction) {
+            transaction->Store(accounts[i], RandomFloat());
+            transaction->Store(accounts[i + 1], RandomFloat());
+        });
     }
+
+    auto[aborts, time] = RunAsyncTransactions(transaction_manager, funcs, WRITE_ITERATIONS);
+
     std::cout << "Aborts: " << aborts << std::endl;
     std::cout << "Time (micro seconds): " << time << std::endl;
 }
 
 void WriteOnlyConflicting(TransactionManager *transaction_manager) {
     std::cout << "Write only conflicting" << std::endl;
-    auto map = GetTestMap();
-    auto read1 = [&](Transaction *transaction) {
-        transaction->Store(&map.find("Joe")->second, 2345.12);
-        transaction->Store(&map.find("Aparna")->second, 203.53);
-        transaction->Store(&map.find("Nana")->second, 435.23);
-        transaction->Store(&map.find("Mike")->second, 104.21);
-        transaction->Store(&map.find("Sam")->second, 123.43);
-        transaction->Store(&map.find("Popo")->second, 2394.56);
-    };
-    auto read2 = [&](Transaction *transaction) {
-        transaction->Store(&map.find("Joe")->second, 2345.12);
-        transaction->Store(&map.find("Aparna")->second, 203.53);
-        transaction->Store(&map.find("Nana")->second, 435.23);
-        transaction->Store(&map.find("Mike")->second, 104.21);
-        transaction->Store(&map.find("Sam")->second, 123.43);
-        transaction->Store(&map.find("Popo")->second, 2394.56);
-    };
-    auto read3 = [&](Transaction *transaction) {
-        transaction->Store(&map.find("Sam")->second, 123.43);
-        transaction->Store(&map.find("Popo")->second, 2394.56);
-        transaction->Store(&map.find("Nana")->second, 435.23);
-        transaction->Store(&map.find("Mike")->second, 104.21);
-        transaction->Store(&map.find("Joe")->second, 2345.12);
-        transaction->Store(&map.find("Aparna")->second, 203.53);
-    };
-
-    size_t aborts = 0;
-    size_t time = 0;
-    for (int i = 0; i < 1000; i++) {
-        auto[new_aborts, new_time] = RunAsyncTransactions(transaction_manager, {read1, read2, read3});
-        aborts += new_aborts;
-        time += new_time;
+    auto accounts_map = GetTestAccounts(2 * WRITE_CONCURRENT_TRANSACTIONS);
+    auto accounts = GetAccountAddresses(accounts_map);
+    std::vector<std::function<void(Transaction *)>> funcs;
+    funcs.reserve(WRITE_CONCURRENT_TRANSACTIONS);
+    for (size_t i = 0; i < accounts.size() - 1; i += 2) {
+        funcs.emplace_back([&](Transaction *transaction) {
+            for (auto &account : accounts) {
+                transaction->Store(account, RandomFloat());
+            }
+        });
     }
+
+    auto[aborts, time] = RunAsyncTransactions(transaction_manager, funcs, WRITE_ITERATIONS);
+
     std::cout << "Aborts: " << aborts << std::endl;
     std::cout << "Time (micro seconds): " << time << std::endl;
 }
 
 void ReadWriteNonConflicting(TransactionManager *transaction_manager) {
     std::cout << "Read write non conflicting" << std::endl;
-    auto map = GetTestMap();
-    auto read1 = [&](Transaction *transaction) {
-        double diff = 20.05;
-        auto joe_balance = transaction->Load(&map.find("Joe")->second);
-        transaction->Store(&map.find("Joe")->second, joe_balance - diff);
 
-        auto aparna_balance = transaction->Load(&map.find("Aparna")->second);
-        transaction->Store(&map.find("Aparna")->second, aparna_balance + diff);
-    };
-    auto read2 = [&](Transaction *transaction) {
-        double diff = 16.73;
-        auto nana_balance = transaction->Load(&map.find("Nana")->second);
-        transaction->Store(&map.find("Nana")->second, nana_balance - diff);
+    auto accounts_map = GetTestAccounts(2 * READ_WRITE_CONCURRENT_TRANSACTIONS);
+    auto accounts = GetAccountAddresses(accounts_map);
+    std::vector<std::function<void(Transaction *)>> funcs;
+    funcs.reserve(READ_WRITE_CONCURRENT_TRANSACTIONS);
+    for (size_t i = 0; i < accounts.size() - 1; i += 2) {
+        funcs.emplace_back([=](Transaction *transaction) {
+            double diff = RandomFloat();
 
-        auto mike_balance = transaction->Load(&map.find("Mike")->second);
-        transaction->Store(&map.find("Mike")->second, mike_balance + diff);
-    };
-    auto read3 = [&](Transaction *transaction) {
-        double diff = 5.42;
-        auto sam_balance = transaction->Load(&map.find("Sam")->second);
-        transaction->Store(&map.find("Sam")->second, sam_balance - diff);
+            auto a_balance = transaction->Load(accounts[i]);
+            transaction->Store(accounts[i], a_balance - diff);
 
-        auto popo_balance = transaction->Load(&map.find("Popo")->second);
-        transaction->Store(&map.find("Popo")->second, popo_balance + diff);
-    };
-
-    size_t aborts = 0;
-    size_t time = 0;
-    for (int i = 0; i < 1000; i++) {
-        auto[new_aborts, new_time] = RunAsyncTransactions(transaction_manager, {read1, read2, read3});
-        aborts += new_aborts;
-        time += new_time;
+            auto b_balance = transaction->Load(accounts[i + 1]);
+            transaction->Store(accounts[i + 1], b_balance + diff);
+        });
     }
+
+    auto[aborts, time] = RunAsyncTransactions(transaction_manager, funcs, READ_WRITE_ITERATIONS);
+
     std::cout << "Aborts: " << aborts << std::endl;
     std::cout << "Time (micro seconds): " << time << std::endl;
 }
 
 void ReadWriteConflicting(TransactionManager *transaction_manager) {
     std::cout << "Read write conflicting" << std::endl;
-    auto map = GetTestMap();
-    auto read1 = [&](Transaction *transaction) {
-        double diff = 20.05;
-        auto joe_balance = transaction->Load(&map.find("Joe")->second);
-        transaction->Store(&map.find("Joe")->second, joe_balance - diff);
 
-        auto aparna_balance = transaction->Load(&map.find("Aparna")->second);
-        transaction->Store(&map.find("Aparna")->second, aparna_balance + diff);
+    auto accounts_map = GetTestAccounts(2 * READ_WRITE_CONCURRENT_TRANSACTIONS);
+    auto accounts = GetAccountAddresses(accounts_map);
+    std::vector<std::function<void(Transaction *)>> funcs;
+    funcs.reserve(READ_WRITE_CONCURRENT_TRANSACTIONS);
+    for (size_t i = 0; i < accounts.size() - 1; i += 2) {
+        funcs.emplace_back([&](Transaction *transaction) {
+            for (size_t j = 0; j < accounts.size() - 1; j += 2) {
+                double diff = RandomFloat();
 
-        diff = 16.73;
-        auto nana_balance = transaction->Load(&map.find("Nana")->second);
-        transaction->Store(&map.find("Nana")->second, nana_balance - diff);
+                auto a_balance = transaction->Load(accounts[j]);
+                transaction->Store(accounts[j], a_balance - diff);
 
-        auto mike_balance = transaction->Load(&map.find("Mike")->second);
-        transaction->Store(&map.find("Mike")->second, mike_balance + diff);
-
-        diff = 5.42;
-        auto sam_balance = transaction->Load(&map.find("Sam")->second);
-        transaction->Store(&map.find("Sam")->second, sam_balance - diff);
-
-        auto popo_balance = transaction->Load(&map.find("Popo")->second);
-        transaction->Store(&map.find("Popo")->second, popo_balance + diff);
-    };
-    auto read2 = [&](Transaction *transaction) {
-        double diff = 16.73;
-        auto nana_balance = transaction->Load(&map.find("Nana")->second);
-        transaction->Store(&map.find("Nana")->second, nana_balance - diff);
-
-        auto mike_balance = transaction->Load(&map.find("Mike")->second);
-        transaction->Store(&map.find("Mike")->second, mike_balance + diff);
-
-        diff = 20.05;
-        auto joe_balance = transaction->Load(&map.find("Joe")->second);
-        transaction->Store(&map.find("Joe")->second, joe_balance - diff);
-
-        auto aparna_balance = transaction->Load(&map.find("Aparna")->second);
-        transaction->Store(&map.find("Aparna")->second, aparna_balance + diff);
-
-        diff = 5.42;
-        auto sam_balance = transaction->Load(&map.find("Sam")->second);
-        transaction->Store(&map.find("Sam")->second, sam_balance - diff);
-
-        auto popo_balance = transaction->Load(&map.find("Popo")->second);
-        transaction->Store(&map.find("Popo")->second, popo_balance + diff);
-    };
-    auto read3 = [&](Transaction *transaction) {
-        double diff = 5.42;
-        auto sam_balance = transaction->Load(&map.find("Sam")->second);
-        transaction->Store(&map.find("Sam")->second, sam_balance - diff);
-
-        auto popo_balance = transaction->Load(&map.find("Popo")->second);
-        transaction->Store(&map.find("Popo")->second, popo_balance + diff);
-
-        diff = 16.73;
-        auto nana_balance = transaction->Load(&map.find("Nana")->second);
-        transaction->Store(&map.find("Nana")->second, nana_balance - diff);
-
-        auto mike_balance = transaction->Load(&map.find("Mike")->second);
-        transaction->Store(&map.find("Mike")->second, mike_balance + diff);
-
-        diff = 20.05;
-        auto joe_balance = transaction->Load(&map.find("Joe")->second);
-        transaction->Store(&map.find("Joe")->second, joe_balance - diff);
-
-        auto aparna_balance = transaction->Load(&map.find("Aparna")->second);
-        transaction->Store(&map.find("Aparna")->second, aparna_balance + diff);
-    };
-
-    size_t aborts = 0;
-    size_t time = 0;
-    for (int i = 0; i < 1000; i++) {
-        auto[new_aborts, new_time] = RunAsyncTransactions(transaction_manager, {read1, read2, read3});
-        aborts += new_aborts;
-        time += new_time;
+                auto b_balance = transaction->Load(accounts[j + 1]);
+                transaction->Store(accounts[j + 1], b_balance + diff);
+            }
+        });
     }
+
+    auto[aborts, time] = RunAsyncTransactions(transaction_manager, funcs, READ_WRITE_ITERATIONS);
+
     std::cout << "Aborts: " << aborts << std::endl;
     std::cout << "Time (micro seconds): " << time << std::endl;
 }

@@ -150,7 +150,7 @@ private:
      * 0 - running
      * 1 - committing
      * 2 - aborting
-     * TODO try and implement with enum
+     * 3 - stalled
      */
     std::atomic<int> state_;
     std::unordered_set<void *> write_set_;

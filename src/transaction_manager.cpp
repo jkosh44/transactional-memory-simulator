@@ -1,5 +1,3 @@
-#include <iostream>
-#include <cassert>
 #include "include/transaction_manager.h"
 
 #include "include/transaction.h"
