@@ -7,6 +7,8 @@
 I implemented a transactional memory simulator that can execute multiple asynchronous transactions. I tested the
 performance of various versioning and conflict detection strategies.
 
+The code can found here: https://github.com/jkosh44/transactional-memory-simulator/
+
 ## Background
 
 An increasingly popular tool in parallel programming is Transactional Memory. Not only does it allow you to read and
