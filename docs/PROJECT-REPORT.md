@@ -383,6 +383,10 @@ less, we are doing less repeat work and less synchronization which leads to less
 stalling is actually cheaper than restarting the entire transaction. Of course if we have a bunch of long running
 transactions then stalling could potentially slow down the system as many other transactions wait for it to finish.
 
+For the read write conflict, even though the lazy optimistic configuration has less aborts than the pessimistic
+configurations, it still takes longer. That's because conflicts are detected much later so more work needs to be redone
+for every abort.
+
 ### Conclusion
 
 For every workload the difference between eager and lazy versioning is negligible. The big difference comes from
