@@ -268,6 +268,10 @@ somehow we'll need to identify which transaction wrote to the conflicting areas 
 undo to. To do this, it's not enough to know the timestamp of the transaction, we would need to know the timestamp of
 every write in the transaction. While this is possible, the overhead involved is not worth it.
 
+For each benchmark I've also included an empty section which has the same number of concurrent transactions and
+iterations as the other configurations, but each transaction is empty. The transaction just begins and immediately
+commits. This is to get a sense of the overhead involved in creating and committing a transaction.
+
 ### Machine Specifications
 
 **OS**: Ubuntu 20.04.2\
@@ -287,7 +291,10 @@ all the non-conflicting workloads many times they would slightly shift around wi
 
 I've included "Read Conflict" under the the "Non Conflict" section because there really is no such thing as a read-read
 conflict. No conflict detection strategy even checks for read-read conflicts, so the "Read Conflict" workload is
-essentially exactly the same as the "Read No Conflict" workload. I only included it for consistency purposes.
+essentially exactly the same as the "Read No Conflict" workload. The one difference is that the empty configuration
+takes much less time comparatively in the conflict workload. This is because the conflict workload transactions each
+read from every account in the map while the non conflict workloads only read from two accounts in the map. Therefore
+the conflict transactions perform much more work per transactions.
 
 For the read only transactions it makes sense that there is no difference between lazy and eager data versioning,
 because there is no data versioning required for read operations. For transactions with writes, there is an equal amount

@@ -9,10 +9,10 @@
 #include "include/abort_exception.h"
 #include "include/transaction_memory_test.h"
 
-static constexpr int READ_CONCURRENT_TRANSACTIONS = 10000;
+static constexpr int READ_CONCURRENT_TRANSACTIONS = 1000;
 static constexpr int READ_ITERATIONS = 10;
 static constexpr int WRITE_CONCURRENT_TRANSACTIONS = 20;
-static constexpr int WRITE_ITERATIONS = 10000;
+static constexpr int WRITE_ITERATIONS = 1000;
 static constexpr int READ_WRITE_CONCURRENT_TRANSACTIONS = 20;
 static constexpr int READ_WRITE_ITERATIONS = 1000;
 
@@ -34,7 +34,7 @@ int RunTransaction(TransactionManager *transaction_manager, const std::function<
 
 TransactionRunDetails
 RunAsyncTransactions(TransactionManager *transaction_manager, std::vector<std::function<void(Transaction *)>> funcs,
-                     int iterations) {
+                     size_t iterations) {
     size_t aborts = 0;
     size_t time = 0;
 
@@ -230,40 +230,60 @@ void ReadWriteConflicting(TransactionManager *transaction_manager) {
     std::cout << "Time (micro seconds): " << time << std::endl;
 }
 
+void EmptyWorkload(TransactionManager *transaction_manager, size_t concurrent_transaction, size_t iterations) {
+    std::cout << "Empty" << std::endl;
+
+    std::vector<std::function<void(Transaction *)>> funcs;
+    funcs.reserve(concurrent_transaction);
+    for (size_t i = 0; i < concurrent_transaction; i ++) {
+        funcs.emplace_back([&](Transaction *transaction) {});
+    }
+
+    auto[aborts, time] = RunAsyncTransactions(transaction_manager, funcs, iterations);
+
+    std::cout << "Aborts: " << aborts << std::endl;
+    std::cout << "Time (micro seconds): " << time << std::endl;
+}
+
 int main(int argc, char *argv[]) {
 
-    TestCorrectness();
+//    TestCorrectness();
 
     TransactionManager transaction_manager1(true, true);
 
     std::cout << std::endl << "LAZY VERSIONING and PESSIMISTIC CONFLICT DETECTION" << std::endl;
 
-    ReadOnlyNonConflicting(&transaction_manager1);
+    /*ReadOnlyNonConflicting(&transaction_manager1);
     ReadOnlyConflicting(&transaction_manager1);
+    EmptyWorkload(&transaction_manager1, READ_CONCURRENT_TRANSACTIONS, READ_ITERATIONS);
     WriteOnlyNonConflicting(&transaction_manager1);
     WriteOnlyConflicting(&transaction_manager1);
+    EmptyWorkload(&transaction_manager1, WRITE_CONCURRENT_TRANSACTIONS, WRITE_ITERATIONS);
     ReadWriteNonConflicting(&transaction_manager1);
-    ReadWriteConflicting(&transaction_manager1);
+    ReadWriteConflicting(&transaction_manager1);*/
+    EmptyWorkload(&transaction_manager1, READ_WRITE_CONCURRENT_TRANSACTIONS, READ_WRITE_ITERATIONS);
 
     TransactionManager transaction_manager2(true, false);
 
     std::cout << std::endl << "LAZY VERSIONING and OPTIMISTIC CONFLICT DETECTION" << std::endl;
 
-    ReadOnlyNonConflicting(&transaction_manager2);
+    /*ReadOnlyNonConflicting(&transaction_manager2);
     ReadOnlyConflicting(&transaction_manager2);
+    EmptyWorkload(&transaction_manager2, READ_CONCURRENT_TRANSACTIONS, READ_ITERATIONS);
     WriteOnlyNonConflicting(&transaction_manager2);
     WriteOnlyConflicting(&transaction_manager2);
     ReadWriteNonConflicting(&transaction_manager2);
-    ReadWriteConflicting(&transaction_manager2);
+    ReadWriteConflicting(&transaction_manager2);*/
 
     TransactionManager transaction_manager3(false, true);
 
     std::cout << std::endl << "EAGER VERSIONING and PESSIMISTIC CONFLICT DETECTION" << std::endl;
 
-    ReadOnlyNonConflicting(&transaction_manager3);
+    /*ReadOnlyNonConflicting(&transaction_manager3);
     ReadOnlyConflicting(&transaction_manager3);
+    EmptyWorkload(&transaction_manager3, READ_CONCURRENT_TRANSACTIONS, READ_ITERATIONS);
     WriteOnlyNonConflicting(&transaction_manager3);
     WriteOnlyConflicting(&transaction_manager3);
     ReadWriteNonConflicting(&transaction_manager3);
-    ReadWriteConflicting(&transaction_manager3);
+    ReadWriteConflicting(&transaction_manager3);*/
 }
