@@ -31,7 +31,7 @@ int RunTransaction(TransactionManager *transaction_manager, const std::function<
  */
 TransactionRunDetails
 RunAsyncTransactions(TransactionManager *transaction_manager, std::vector<std::function<void(Transaction *)>> funcs,
-                     int iterations = 1);
+                     size_t iterations = 1);
 
 std::unordered_map<std::string, double> GetTestAccounts(size_t size);
 
