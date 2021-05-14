@@ -247,43 +247,43 @@ void EmptyWorkload(TransactionManager *transaction_manager, size_t concurrent_tr
 
 int main(int argc, char *argv[]) {
 
-//    TestCorrectness();
+    TestCorrectness();
 
     TransactionManager transaction_manager1(true, true);
 
     std::cout << std::endl << "LAZY VERSIONING and PESSIMISTIC CONFLICT DETECTION" << std::endl;
 
-    /*ReadOnlyNonConflicting(&transaction_manager1);
+    ReadOnlyNonConflicting(&transaction_manager1);
     ReadOnlyConflicting(&transaction_manager1);
     EmptyWorkload(&transaction_manager1, READ_CONCURRENT_TRANSACTIONS, READ_ITERATIONS);
     WriteOnlyNonConflicting(&transaction_manager1);
     WriteOnlyConflicting(&transaction_manager1);
     EmptyWorkload(&transaction_manager1, WRITE_CONCURRENT_TRANSACTIONS, WRITE_ITERATIONS);
     ReadWriteNonConflicting(&transaction_manager1);
-    ReadWriteConflicting(&transaction_manager1);*/
+    ReadWriteConflicting(&transaction_manager1);
     EmptyWorkload(&transaction_manager1, READ_WRITE_CONCURRENT_TRANSACTIONS, READ_WRITE_ITERATIONS);
 
     TransactionManager transaction_manager2(true, false);
 
     std::cout << std::endl << "LAZY VERSIONING and OPTIMISTIC CONFLICT DETECTION" << std::endl;
 
-    /*ReadOnlyNonConflicting(&transaction_manager2);
+    ReadOnlyNonConflicting(&transaction_manager2);
     ReadOnlyConflicting(&transaction_manager2);
     EmptyWorkload(&transaction_manager2, READ_CONCURRENT_TRANSACTIONS, READ_ITERATIONS);
     WriteOnlyNonConflicting(&transaction_manager2);
     WriteOnlyConflicting(&transaction_manager2);
     ReadWriteNonConflicting(&transaction_manager2);
-    ReadWriteConflicting(&transaction_manager2);*/
+    ReadWriteConflicting(&transaction_manager2);
 
     TransactionManager transaction_manager3(false, true);
 
     std::cout << std::endl << "EAGER VERSIONING and PESSIMISTIC CONFLICT DETECTION" << std::endl;
 
-    /*ReadOnlyNonConflicting(&transaction_manager3);
+    ReadOnlyNonConflicting(&transaction_manager3);
     ReadOnlyConflicting(&transaction_manager3);
     EmptyWorkload(&transaction_manager3, READ_CONCURRENT_TRANSACTIONS, READ_ITERATIONS);
     WriteOnlyNonConflicting(&transaction_manager3);
     WriteOnlyConflicting(&transaction_manager3);
     ReadWriteNonConflicting(&transaction_manager3);
-    ReadWriteConflicting(&transaction_manager3);*/
+    ReadWriteConflicting(&transaction_manager3);
 }
